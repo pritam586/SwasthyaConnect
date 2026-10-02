@@ -1,0 +1,6 @@
+tensorflow-cpu>=2.16,<2.22
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+Pillow>=10.0
+openpyxl>=3.1

@@ -1,0 +1,32 @@
+{
+  "source_records": 710,
+  "source_images": 710,
+  "retained_unique_images": 497,
+  "same_label_duplicate_images_removed": 211,
+  "cross_label_duplicate_groups_excluded": [
+    [
+      "Image_310",
+      "Image_188"
+    ]
+  ],
+  "unmatched_source_files": [],
+  "image_size": [
+    224,
+    224
+  ],
+  "split_label_counts": {
+    "train": {
+      "anemic": 178,
+      "non_anemic": 170
+    },
+    "validation": {
+      "anemic": 38,
+      "non_anemic": 36
+    },
+    "test": {
+      "anemic": 38,
+      "non_anemic": 37
+    }
+  },
+  "warning": "Research dataset only. Do not use this output for diagnosis or treatment decisions."
+}

@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Nunito', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #dff0f5;
+}
+
+.font-display {
+  font-family: 'Nunito', sans-serif;
+}
+
+.font-body {
+  font-family: 'Inter', sans-serif;
+}
+
+@keyframes sc-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sc-ping {
+  0%   { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes sc-pulse-ring {
+  0%   { transform: scale(0.95); opacity: 0.6; }
+  50%  { transform: scale(1.05); opacity: 0.2; }
+  100% { transform: scale(0.95); opacity: 0.6; }
+}
+
+@keyframes sc-bounce-dot {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes sc-scan-line {
+  0%   { transform: translateY(-30px); opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(30px); opacity: 0; }
+}
+
+@keyframes sc-waveform {
+  0%, 100% { height: 6px; }
+  25%       { height: 18px; }
+  50%       { height: 10px; }
+  75%       { height: 24px; }
+}
+
+@keyframes sc-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sc-fade-in {
+  animation: sc-fade-in 0.35s ease both;
+}
+
+.sc-spin {
+  animation: sc-spin 1.4s linear infinite;
+}
+
+.sc-ping {
+  animation: sc-ping 1.5s ease-out infinite;
+}
+
+.sc-pulse-ring {
+  animation: sc-pulse-ring 2.2s ease-in-out infinite;
+}
+
+.sc-bounce-1 { animation: sc-bounce-dot 1s ease infinite 0.0s; }
+.sc-bounce-2 { animation: sc-bounce-dot 1s ease infinite 0.15s; }
+.sc-bounce-3 { animation: sc-bounce-dot 1s ease infinite 0.30s; }
+
+.sc-scan { animation: sc-scan-line 2s ease-in-out infinite; }
+
+.sc-wave-1 { animation: sc-waveform 0.8s ease-in-out infinite 0.0s; }
+.sc-wave-2 { animation: sc-waveform 0.8s ease-in-out infinite 0.1s; }
+.sc-wave-3 { animation: sc-waveform 0.8s ease-in-out infinite 0.2s; }
+.sc-wave-4 { animation: sc-waveform 0.8s ease-in-out infinite 0.3s; }
+.sc-wave-5 { animation: sc-waveform 0.8s ease-in-out infinite 0.4s; }
+
+/* Thin scrollbars only on hover */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
