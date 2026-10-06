@@ -1,27 +1,28 @@
 export type AbhaLinkResponse = {
-  integration_status: "not_configured"
-  linked: false
+  integration_status: "linked" | "optional_skipped" | "sandbox_mode"
+  linked: boolean
+  pmjay_eligible: boolean
+  annual_coverage_inr: number
+  abha_number: string | null
   message: string
 }
 
-const endpoint = import.meta.env.VITE_ABHA_API_URL ?? "/api/v1/abha/link"
-
-export async function requestAbhaLink(abhaNumber: string, consentGranted: boolean): Promise<AbhaLinkResponse> {
-  const response = await fetch(endpoint, {
+export async function requestAbhaLink(
+  abhaNumber: string,
+  consentGranted: boolean,
+  skip: boolean = false
+): Promise<AbhaLinkResponse> {
+  const response = await fetch("/api/v1/abha/link", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ abha_number: abhaNumber, consent_granted: consentGranted }),
+    body: JSON.stringify({
+      abha_number: abhaNumber,
+      consent_granted: consentGranted,
+      skip: skip,
+    }),
   })
-  const payload: unknown = await response.json().catch(() => null)
-  if (!response.ok || !isSafeAbhaResponse(payload)) {
-    throw new Error("ABHA linking is unavailable. No health record was linked.")
+  if (!response.ok) {
+    throw new Error("ABHA request failed.")
   }
-  return payload
-}
-
-function isSafeAbhaResponse(value: unknown): value is AbhaLinkResponse {
-  return Boolean(value && typeof value === "object"
-    && (value as Record<string, unknown>).integration_status === "not_configured"
-    && (value as Record<string, unknown>).linked === false
-    && typeof (value as Record<string, unknown>).message === "string")
+  return response.json()
 }

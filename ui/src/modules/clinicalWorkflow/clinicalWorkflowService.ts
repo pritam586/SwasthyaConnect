@@ -1,23 +1,47 @@
 export type ClinicianCase = {
-  case_id: string
-  clinician_review_required: boolean
-  source: string
+  id: string
+  patient_name: string
+  age: string
+  gender: string
+  phone: string
+  location: string
+  abha_id?: string | null
+  pmjay_eligible: boolean
+  visual_confidence: number
+  symptoms: string[]
+  ai_summary: string
+  urgency: "green" | "yellow" | "red"
+  status: string
+  diagnosis?: string | null
+  rx_notes?: string | null
+  created_at: string
 }
 
-const endpoint = import.meta.env.VITE_CLINICAL_WORKFLOW_API_URL ?? "/api/v1/clinical-workflow/cases"
-
-export async function requestClinicianCases(): Promise<ClinicianCase[]> {
-  const response = await fetch(endpoint)
-  const payload: unknown = await response.json().catch(() => null)
-  if (!response.ok || !Array.isArray(payload)) {
-    throw new Error("The clinician workflow is unavailable. No patient data was loaded.")
+export async function fetchClinicianCases(): Promise<ClinicianCase[]> {
+  const response = await fetch("/api/v1/clinical-workflow/cases")
+  if (!response.ok) {
+    throw new Error("Failed to load clinician cases from server.")
   }
-  return payload.filter(isClinicianCase)
+  return response.json()
 }
 
-function isClinicianCase(value: unknown): value is ClinicianCase {
-  return Boolean(value && typeof value === "object"
-    && typeof (value as Record<string, unknown>).case_id === "string"
-    && typeof (value as Record<string, unknown>).clinician_review_required === "boolean"
-    && typeof (value as Record<string, unknown>).source === "string")
+export async function submitPrescription(
+  caseId: string,
+  data: {
+    doctor_id?: string
+    doctor_name: string
+    diagnosis: string
+    clinical_notes: string
+    medicines: Array<{ name: string; freq: string }>
+  }
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`/api/v1/clinical-workflow/cases/${caseId}/prescription`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) {
+    throw new Error("Failed to submit prescription.")
+  }
+  return response.json()
 }

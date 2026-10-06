@@ -1,56 +1,42 @@
-export type TriageStatus = "inconclusive"
+export type UrgencyLevel = "green" | "yellow" | "red"
 
-export type TriageRequest = {
+export type TriageSubmission = {
+  user_id?: string
+  patient_name: string
+  age: string
+  gender: string
+  phone: string
+  location: string
+  abha_id?: string | null
+  pmjay_eligible?: boolean
   symptom_answers: string[]
   transcript?: string
   visual_screening?: {
     status: "available" | "inconclusive" | "unavailable"
+    confidence: number
+    screening_label: string
     quality_passed: boolean
-    model_version?: string
   }
 }
 
-export type TriageResponse = {
-  status: TriageStatus
-  clinician_review_required: true
-  reasons: string[]
+export type TriageAssessmentResult = {
+  case_id: string
+  urgency: UrgencyLevel
+  ai_summary: string
+  explainability_note: string
+  visual_confidence: number
   disclaimer: string
 }
 
-export class TriageServiceError extends Error {
-  constructor(public readonly status: number, message: string) {
-    super(message)
-    this.name = "TriageServiceError"
-  }
-}
-
-const endpoint = import.meta.env.VITE_TRIAGE_API_URL ?? "/api/v1/triage/assess"
-
-export async function requestTriageAssessment(input: TriageRequest): Promise<TriageResponse> {
-  const response = await fetch(endpoint, {
+export async function submitTriageAssessment(input: TriageSubmission): Promise<TriageAssessmentResult> {
+  const response = await fetch("/api/v1/triage/assess", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   })
-  const payload: unknown = await response.json().catch(() => null)
+  const payload = await response.json()
   if (!response.ok) {
-    const message = typeof payload === "object" && payload && "detail" in payload
-      ? String(payload.detail)
-      : "Symptom collection is unavailable. No triage result was generated."
-    throw new TriageServiceError(response.status, message)
-  }
-  if (!isSafeTriageResponse(payload)) {
-    throw new TriageServiceError(502, "The triage service returned an invalid or unsafe response.")
+    throw new Error(payload.detail || "Triage assessment failed.")
   }
   return payload
-}
-
-function isSafeTriageResponse(value: unknown): value is TriageResponse {
-  if (!value || typeof value !== "object") return false
-  const response = value as Record<string, unknown>
-  return response.status === "inconclusive"
-    && response.clinician_review_required === true
-    && Array.isArray(response.reasons)
-    && response.reasons.every((reason) => typeof reason === "string")
-    && typeof response.disclaimer === "string"
 }
