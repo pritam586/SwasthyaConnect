@@ -16,8 +16,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from backend.auth_service import get_current_doctor, get_current_user, log_audit_event
-from backend.database import get_db_connection
+from .auth_service import get_current_doctor, get_current_user, log_audit_event
+from .database import get_db_connection
 
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
 

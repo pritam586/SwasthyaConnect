@@ -26,17 +26,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.admin_service import router as admin_router
-from backend.appointment_service import router as appointment_router
-from backend.auth_service import router as auth_router
-from backend.clinical_workflow.service import router as clinical_workflow_router
-from backend.database import init_db, seed_directory_data_if_empty
-from backend.patient_service import doctor_router, router as patient_router
-from backend.pharmacy_service import med_router, router as pharmacy_router
-from backend.reports_service import router as reports_router
-from backend.triage.service import router as triage_router
-from backend.abha.service import router as abha_router
-from ml.inference_service import router as visual_screening_router
+from .admin_service import router as admin_router
+from .appointment_service import router as appointment_router
+from .auth_service import router as auth_router
+from .clinical_workflow.service import router as clinical_workflow_router
+from .database import init_db, seed_directory_data_if_empty
+from .patient_service import doctor_router, router as patient_router
+from .pharmacy_service import med_router, router as pharmacy_router
+from .reports_service import router as reports_router
+from .triage.service import router as triage_router
+from .abha.service import router as abha_router
+from ..ml.inference_service import router as visual_screening_router
 
 # Initialize database schema and baseline data
 init_db()

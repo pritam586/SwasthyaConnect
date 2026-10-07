@@ -22,9 +22,9 @@ import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from backend.crypto_utils import hash_password, is_hash_legacy, verify_password
-from backend.database import get_db_connection
-from backend.phone_verification import send_phone_otp, verify_phone_otp
+from .crypto_utils import hash_password, is_hash_legacy, verify_password
+from .database import get_db_connection
+from .phone_verification import send_phone_otp, verify_phone_otp
 
 JWT_SECRET = os.getenv("JWT_SECRET", "swasthya-connect-jwt-secret-key-2026-secure")
 JWT_ALGORITHM = "HS256"
