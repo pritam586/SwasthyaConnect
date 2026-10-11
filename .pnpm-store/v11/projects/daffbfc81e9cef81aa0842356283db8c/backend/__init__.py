@@ -1,1 +1,0 @@
-"""SwasthyaConnect backend API package."""
