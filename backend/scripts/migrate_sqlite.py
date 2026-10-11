@@ -142,15 +142,16 @@ def main() -> None:
                                    status=col(row, "status") or "pending", diagnosis=col(row, "diagnosis"),
                                    clinical_notes=col(row, "rx_notes")), "triage_cases")
 
-        # Medicine names are unique: reuse an existing catalogue entry (e.g. from seed_demo) instead.
-        medicine_ids = {name.lower(): mid for mid, name in db.execute(select(Medicine.id, Medicine.name))}
-        medicine_map: dict[str, str] = {}
+        # Medicine names are unique: reuse a catalogue entry that already exists (e.g. from
+        # seed_demo) and point the old stock rows at it.
+        medicine_ids = {m.name.lower(): m.id for m in db.scalars(select(Medicine))}
+        old_to_new_medicine: dict[str, str] = {}
         for row in _rows(old, "medicines"):
             existing = medicine_ids.get(str(col(row, "name")).lower())
             if existing:
-                medicine_map[col(row, "id")] = existing
+                old_to_new_medicine[col(row, "id")] = existing
                 continue
-            medicine_map[col(row, "id")] = col(row, "id")
+            old_to_new_medicine[col(row, "id")] = col(row, "id")
             add(db, Medicine(id=col(row, "id"), name=col(row, "name"), generic_name=col(row, "generic_name"), strength=col(row, "strength"),
                              form=col(row, "form") or "Tablet", category=col(row, "category"), mrp_inr=col(row, "mrp_inr"),
                              jan_aushadhi_price_inr=col(row, "jan_aushadhi_price_inr"), manufacturer=col(row, "manufacturer"),
@@ -160,9 +161,9 @@ def main() -> None:
                              longitude=col(row, "longitude"), phone=col(row, "phone"), is_jan_aushadhi=bool(col(row, "is_jan_aushadhi")),
                              open_hours=col(row, "open_hours"), active=bool(col(row, "active"))), "pharmacies")
         db.flush()
-        stocked = set(db.execute(select(PharmacyInventory.pharmacy_id, PharmacyInventory.medicine_id)))
+        stocked = set(db.execute(select(PharmacyInventory.pharmacy_id, PharmacyInventory.medicine_id)).tuples())
         for row in _rows(old, "pharmacy_inventory"):
-            medicine_id = medicine_map.get(col(row, "medicine_id"), col(row, "medicine_id"))
+            medicine_id = old_to_new_medicine.get(col(row, "medicine_id"), col(row, "medicine_id"))
             if (col(row, "pharmacy_id"), medicine_id) in stocked:
                 continue
             stocked.add((col(row, "pharmacy_id"), medicine_id))
