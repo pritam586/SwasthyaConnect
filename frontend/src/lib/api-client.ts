@@ -1,39 +1,31 @@
-import { ApiError } from "@/types/api";
 import { clearSession, getAccessToken, getRefreshToken, persistTokens } from "@/lib/auth-storage";
+import { ApiError } from "@/types/api";
 
-const API_PREFIX = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+/** Empty in local development (requests go through the Next.js /api proxy). */
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
-function joinUrl(path: string): string {
-  if (path.startsWith("http")) return path;
-  return `${API_PREFIX}${path}`;
+function url(path: string): string {
+  return `${API_BASE_URL}${path}`;
 }
 
-function extractMessage(payload: unknown, fallback: string): string {
-  if (!payload || typeof payload !== "object") return fallback;
-  const record = payload as Record<string, unknown>;
-  if (typeof record.detail === "string") return record.detail;
-  if (Array.isArray(record.detail) && record.detail[0] && typeof record.detail[0] === "object") {
-    const first = record.detail[0] as Record<string, unknown>;
-    if (typeof first.msg === "string") return first.msg;
-  }
-  if (record.error && typeof record.error === "object") {
-    const err = record.error as Record<string, unknown>;
-    if (typeof err.message === "string") return err.message;
-  }
-  if (typeof record.message === "string") return record.message;
-  return fallback;
+/** The backend always answers errors as {"error": {"code", "message", "details"?}}. */
+function readError(payload: unknown, status: number): ApiError {
+  const error = (payload as { error?: { code?: string; message?: string } } | null)?.error;
+  return new ApiError({
+    status,
+    code: error?.code,
+    message: error?.message ?? (status >= 500 ? "The server had a problem. Please try again." : `Request failed (${status}).`),
+  });
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
 
-async function tryRefresh(): Promise<boolean> {
+async function refreshTokens(): Promise<boolean> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
-  if (refreshInFlight) return refreshInFlight;
-
-  refreshInFlight = (async () => {
+  refreshInFlight ??= (async () => {
     try {
-      const response = await fetch(joinUrl("/api/v1/auth/refresh"), {
+      const response = await fetch(url("/api/v1/auth/refresh"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
@@ -42,8 +34,8 @@ async function tryRefresh(): Promise<boolean> {
         clearSession();
         return false;
       }
-      const body = (await response.json()) as { token: string; refresh_token: string };
-      persistTokens(body.token, body.refresh_token);
+      const body = (await response.json()) as { access_token: string; refresh_token: string };
+      persistTokens(body.access_token, body.refresh_token);
       return true;
     } catch {
       return false;
@@ -51,62 +43,53 @@ async function tryRefresh(): Promise<boolean> {
       refreshInFlight = null;
     }
   })();
-
   return refreshInFlight;
 }
 
 export interface RequestOptions {
-  method?: string;
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   formData?: FormData;
   auth?: boolean;
   signal?: AbortSignal;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function send(path: string, options: RequestOptions, retried: boolean): Promise<Response> {
   const { method = "GET", body, formData, auth = true, signal } = options;
+  const headers = new Headers();
+  if (!formData && body !== undefined) headers.set("Content-Type", "application/json");
+  const token = auth ? getAccessToken() : null;
+  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const execute = async (retried: boolean): Promise<T> => {
-    const headers = new Headers();
-    if (!formData) {
-      headers.set("Content-Type", "application/json");
-    }
-    if (auth) {
-      const token = getAccessToken();
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-    }
-
-    const response = await fetch(joinUrl(path), {
+  let response: Response;
+  try {
+    response = await fetch(url(path), {
       method,
       headers,
-      body: formData ? formData : body === undefined ? undefined : JSON.stringify(body),
+      body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),
       signal,
     });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError({ status: 0, code: "NETWORK", message: "Cannot reach the server. Check your internet connection." });
+  }
 
-    if (response.status === 401 && auth && !retried) {
-      const refreshed = await tryRefresh();
-      if (refreshed) return execute(true);
-    }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    const payload: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new ApiError({
-        status: response.status,
-        message: extractMessage(payload, `Request failed (${response.status})`),
-      });
-    }
-    return payload as T;
-  };
-
-  return execute(false);
+  if (response.status === 401 && auth && !retried && (await refreshTokens())) {
+    return send(path, options, true);
+  }
+  return response;
 }
 
-export function assetUrl(path: string | null | undefined): string | null {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  return `${API_PREFIX}${path}`;
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options, false);
+  const payload: unknown = response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) throw readError(payload, response.status);
+  return payload as T;
+}
+
+/** Downloads a protected file (report, eye photo, heatmap) as a blob with the user's token. */
+export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await send(path, { signal }, false);
+  if (!response.ok) throw readError(await response.json().catch(() => null), response.status);
+  return response.blob();
 }

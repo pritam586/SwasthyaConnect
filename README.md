@@ -1,890 +1,228 @@
-# 🩺 SwasthyaConnect
+# SwasthyaConnect
 
-### Offline-First Rural Healthcare & Telemedicine Platform
+AI-assisted anaemia screening and telehealth for rural India. Patients screen from an eye photo and answer symptom questions; a rule-based triage orders the case for a verified doctor, who decides on diagnosis and prescription. Patients also keep health records, find nearby pharmacies that stock their medicines, and book doctors.
 
-## Repository Audit Summary
+> **Screening support, not diagnosis.** Every screening and triage result is decision support for a licensed clinician. The doctor makes every diagnosis and prescribing decision.
 
-The live product implementation is centered in the `ui/` workspace:
-
-- `ui/src/` contains the React/Vite patient-facing application.
-- `ui/backend/` contains the FastAPI API gateway and domain services.
-- `ui/ml/` contains the ML inference boundary and visual screening workflow.
-- `ui/uploads/` stores patient report files and generated Grad-CAM heatmaps.
-
-The legacy `frontend/` folder is a separate Next.js scaffold created during initial prototyping. It is not wired into the production service flow and is intentionally left in place for reference rather than deleted until the current app is fully retired. The active developer workflow is to run the backend from `ui/backend/app.py` and the frontend from `ui/`.
-
-
-SwasthyaConnect is an **offline-first digital healthcare platform** designed to improve access to healthcare services for people in rural and underserved areas.
-
-The platform connects **patients, doctors, pharmacies, and healthcare services** through a unified system. It provides teleconsultation, medical-record management, medicine discovery, nearby pharmacy discovery, appointment management, and AI-assisted **anaemia screening with image-quality validation**.
-
-> **Important:** The anaemia screening module is designed as a **screening and triage-support system**, not as a replacement for professional medical diagnosis.
+Capstone project, Department of CET, MIT-WPU: Sairaj Harpale, Pritam Prajapati, Pratik Singh, Giriraj Partani.
 
 ---
 
-## 📌 Problem Statement
-
-People living in rural and underserved regions often face challenges such as:
-
-* Limited access to qualified doctors
-* Long travel distances to healthcare facilities
-* Poor internet connectivity
-* Difficulty maintaining medical records
-* Difficulty finding prescribed medicines
-* Limited access to nearby pharmacies
-* Language and communication barriers
-* Delayed identification of health risks
-* Lack of convenient telemedicine services
-
-SwasthyaConnect aims to address these challenges through a **mobile/web-based healthcare ecosystem with offline-first capabilities**.
-
----
-
-# 🎯 Objectives
-
-The primary objectives of SwasthyaConnect are:
-
-1. Provide accessible digital healthcare services.
-2. Enable remote doctor-patient consultations.
-3. Support healthcare access in low-connectivity environments.
-4. Maintain secure digital medical records.
-5. Provide AI-assisted anaemia screening.
-6. Validate medical images before ML inference.
-7. Provide medicine discovery from doctor prescriptions/reports.
-8. Help users locate nearby pharmacies.
-9. Provide appointment and consultation management.
-10. Support multilingual and voice-based healthcare interaction.
-11. Integrate with healthcare ecosystems such as **ABHA/ABDM** where feasible.
-12. Provide a scalable architecture for future healthcare services.
-
----
-
-# ✨ Key Features
-
-## 👤 Patient Module
-
-Patients can:
-
-* Create an account
-* Login securely
-* Manage their profile
-* View medical history
-* Manage previous/current medications
-* Upload medical reports
-* View prescriptions
-* Book appointments
-* Connect with doctors
-* Participate in teleconsultations
-* Search for medicines
-* Find nearby pharmacies
-* View health-screening results
-* Receive notifications
-* Access information even under limited connectivity
-
----
-
-## 👨‍⚕️ Doctor Module
-
-Doctors can:
-
-* Register/login securely
-* Manage professional profiles
-* View assigned patients
-* Review patient medical history
-* Review uploaded medical reports
-* Conduct online consultations
-* Create digital prescriptions
-* Recommend medicines
-* Manage appointments
-* Monitor patient information
-* Provide consultation-based recommendations
-
----
-
-## 💊 Medicine & Pharmacy Discovery
-
-SwasthyaConnect provides a medicine-discovery workflow.
-
-A medicine can be identified from:
-
-* Doctor prescriptions
-* Uploaded medical reports
-* Consultation records
-* Manually entered medicine names
-
-After identifying the required medicine, the system can help users discover **nearby pharmacies** based on location and availability.
-
-### Pharmacy Discovery Flow
+## Architecture
 
 ```text
-Doctor Prescription / Medical Report
-              ↓
-       Medicine Extraction
-              ↓
-       Medicine Verification
-              ↓
-     User Location Detection
-              ↓
-      Nearby Pharmacy Search
-              ↓
-   Distance-Based Pharmacy List
-              ↓
-        Pharmacy Details
+ Browser ──HTTPS──> frontend/   Next.js 15 on Vercel
+    │
+    └──HTTPS (bearer token)──> backend/   FastAPI on Render ──> PostgreSQL (Render)
+                                   │
+                                   └──private network──> ml-service/   FastAPI + TensorFlow on Render
 ```
 
-For a new user with no previous location or medication history, the system should **not display irrelevant historical data**.
+| Service | Stack | Responsibility |
+| --- | --- | --- |
+| `frontend/` | Next.js 15 App Router, React 19, TypeScript, Tailwind 4 | All screens; English and Hindi on patient pages |
+| `backend/` | FastAPI, SQLAlchemy 2, Alembic, PyJWT | Auth and roles, records, triage, pharmacy search, appointments, files, admin |
+| `ml-service/` | FastAPI, TensorFlow (MobileNetV3Small) | Photo quality gate, CNN screening, Grad-CAM heatmap |
+| Database | PostgreSQL (production), SQLite (local) | All data, including uploaded files (hosts have no persistent disk) |
 
-The first pharmacy search should be based on the user's current/requested location and the medicine they are looking for.
+### Backend MVC
 
----
+| Layer | Folder | Role |
+| --- | --- | --- |
+| Model | `app/models/` | Tables, relationships, indexes, unique constraints |
+| View | `frontend/` | The UI lives in the Next.js app; the API returns JSON |
+| Controller | `app/controllers/` | Thin HTTP handlers: validate, call one service, return a schema |
+| Routes | `app/routes/` | Mounts controllers under `/api/v1/...` |
+| Services | `app/services/` | Business logic, DB workflows, ML and SMS integrations |
+| Validators | `app/schemas/` | Pydantic request/response schemas |
+| Middleware | `app/middleware/` | Auth and role checks, error format, rate limit, security headers, access log |
+| Config | `app/config/` | Environment settings, database engine/sessions, CORS |
 
-# 🩸 AI-Assisted Anaemia Screening
+### Security model
 
-SwasthyaConnect includes an image-based anaemia screening pipeline.
-
-The system uses a **quality-gate approach** before performing ML inference.
-
-### Pipeline
-
-```text
-Image Capture / Upload
-        ↓
-Image Quality Validation
-        ↓
-Valid Image?
-   ↙          ↘
- No           Yes
- ↓             ↓
-Request       ML Model
-New Image       ↓
-              Prediction
-                 ↓
-          Risk/Triage Category
-                 ↓
-       Doctor/Healthcare Review
-```
-
-### ML Components
-
-The planned/implemented pipeline includes:
-
-* Python-based ML runtime
-* MobileNetV2 / EfficientNet-Lite
-* Image preprocessing
-* Image-quality validation
-* Grad-CAM visualization
-* Screening/triage classification
-
-### Dataset
-
-The project uses publicly available anaemia-related image datasets, including:
-
-* EyeS-Defy-Anemia
-* CP-AnemiC
-
-The combined dataset contains approximately **928 images** used during development/research.
-
-> Model predictions are intended to support screening and triage. They should not be treated as a definitive medical diagnosis.
+- Passwords: PBKDF2-HMAC-SHA256, 600,000 iterations; older hashes upgrade on login.
+- Sessions: 60-minute JWT access token plus a rotating, single-use refresh token (stored hashed).
+- Roles are enforced on the API, never only in the UI. Patients reach only their own rows. Doctors reach a patient only through a workflow: a triage case in the queue, or an appointment with them. New doctors stay `PENDING` until an admin verifies their registration number. Admins manage accounts and data but cannot open medical records.
+- Uploaded reports, eye photos and heatmaps are stored in the database and served only through `GET /api/v1/files/{id}` after an access check. They are never public URLs.
+- Errors always use `{"error": {"code", "message", "details"?}}`. Unexpected errors are logged server-side and never leak stack traces.
+- In production the API refuses to start with a missing or weak `JWT_SECRET`, wildcard CORS, the development OTP provider, or no `DATABASE_URL`.
 
 ---
 
-# 🟢🟡🔴 Triage System
-
-The screening workflow can classify results into three levels:
-
-| Level     | Meaning                 | Suggested Action                     |
-| --------- | ----------------------- | ------------------------------------ |
-| 🟢 Green  | Lower screening risk    | Continue routine healthcare          |
-| 🟡 Yellow | Moderate/uncertain risk | Consider medical consultation        |
-| 🔴 Red    | Higher screening risk   | Seek professional medical evaluation |
-
-The system is designed to **assist healthcare decisions**, not independently diagnose patients.
-
----
-
-# 📱 Offline-First Architecture
-
-A major goal of SwasthyaConnect is supporting users with unreliable internet connectivity.
-
-The application follows an **offline-first approach** where appropriate data can be stored locally and synchronized when connectivity becomes available.
-
-### Basic Synchronization Flow
-
-```text
-                ┌─────────────────┐
-                │   Mobile/Web    │
-                │    Client       │
-                └────────┬────────┘
-                         │
-                Internet Available?
-                    /           \
-                  Yes            No
-                   ↓              ↓
-             Backend API      Local Storage
-                   ↓              ↓
-               Database       Pending Queue
-                   │              │
-                   └──────┬───────┘
-                          ↓
-                    Synchronization
-```
-
-This architecture is particularly useful for rural areas where connectivity may be intermittent.
-
----
-
-# 🏥 Telemedicine
-
-SwasthyaConnect enables remote healthcare interaction between patients and doctors.
-
-Possible workflow:
-
-```text
-Patient
-   ↓
-Doctor Search
-   ↓
-Appointment Booking
-   ↓
-Doctor Confirmation
-   ↓
-Teleconsultation
-   ↓
-Medical Assessment
-   ↓
-Digital Prescription
-   ↓
-Medicine Discovery
-   ↓
-Nearby Pharmacy
-```
-
----
-
-# 📍 Location & Nearby Pharmacy
-
-The application can use location services to assist users in finding pharmacies near them.
-
-The system can consider:
-
-* Current user location
-* Pharmacy coordinates
-* Distance
-* Medicine requirement
-* Pharmacy availability
-* Search radius
-
-Example:
-
-```text
-User Location
-      ↓
-Find Pharmacies
-      ↓
-Calculate Distance
-      ↓
-Sort by Distance
-      ↓
-Display Nearby Pharmacies
-```
-
-The system should request location permission appropriately and provide a manual location/search option when location access is unavailable.
-
----
-
-# 🔐 Authentication & Security
-
-SwasthyaConnect is designed with security as a core requirement because it handles healthcare-related information.
-
-The authentication architecture includes:
-
-* User registration
-* Secure login
-* JWT-based authentication
-* Password hashing
-* Protected API routes
-* Role-based authorization
-* Secure session/token handling
-* Input validation
-* API validation
-* CORS configuration
-* Environment variables for secrets
-* Rate limiting
-* Secure HTTP headers
-
-### User Roles
-
-```text
-                ┌──────────────┐
-                │    User      │
-                └──────┬───────┘
-                       │
-             ┌─────────┴─────────┐
-             ↓                   ↓
-         Patient              Doctor
-```
-
-Additional roles such as administrators/pharmacy users can be introduced as the platform evolves.
-
----
-
-# 🗄️ Database
-
-The backend uses a relational database architecture for structured healthcare information.
-
-The database can contain entities such as:
-
-* Users
-* Patients
-* Doctors
-* Appointments
-* Prescriptions
-* Medicines
-* Medical Reports
-* Medical History
-* Screening Results
-* Pharmacies
-* Notifications
-* Consultation Records
-
-Sensitive information should be stored and accessed according to appropriate security and privacy requirements.
-
----
-
-# 🏛️ System Architecture
-
-```text
-                       ┌──────────────────┐
-                       │   Patient App    │
-                       └────────┬─────────┘
-                                │
-                       ┌────────▼─────────┐
-                       │   Web Interface  │
-                       └────────┬─────────┘
-                                │
-                         REST / HTTPS API
-                                │
-                ┌───────────────▼───────────────┐
-                │       Node.js / Express       │
-                │          Backend API           │
-                └───────┬───────────┬───────────┘
-                        │           │
-               ┌────────▼───┐   ┌──▼────────────┐
-               │ PostgreSQL │   │ Authentication│
-               │ Database   │   │ / Authorization│
-               └────────────┘   └───────────────┘
-                        │
-              ┌─────────▼─────────┐
-              │   ML Runtime      │
-              │     Python        │
-              └─────────┬─────────┘
-                        │
-              ┌─────────▼─────────┐
-              │ ML Screening Model│
-              │ MobileNetV2 /     │
-              │ EfficientNet-Lite │
-              └───────────────────┘
-
-          External / Healthcare Integrations
-                        │
-          ┌─────────────┼──────────────┐
-          ↓             ↓              ↓
-        Maps          ABDM          Voice/
-      Services       / ABHA         Language
-```
-
----
-
-# 🛠️ Technology Stack
-
-## Frontend
-
-* Flutter
-* Dart
-* Responsive UI
-* Offline/local storage
-* REST API integration
-
-## Backend
-
-* Node.js
-* Express.js
-* REST APIs
-* JWT Authentication
-* Role-Based Access Control
-* Input validation
-* Rate limiting
-
-## Database
-
-* PostgreSQL
-
-## Machine Learning
-
-* Python
-* TensorFlow / compatible ML framework
-* MobileNetV2
-* EfficientNet-Lite
-* Grad-CAM
-* Image preprocessing
-* Quality validation
-
-## Healthcare Integration
-
-* ABHA / ABDM Sandbox
-* Mocked healthcare-service integrations where required
-* Future integration with government/healthcare APIs
-
-## Communication
-
-Potential integrations include:
-
-* Twilio
-* Whisper
-* Bhashini
-* Voice/telemedicine services
-
-## Development & Deployment
-
-* Git
-* GitHub
-* Docker
-* REST APIs
-* Environment-based configuration
-* Cloud deployment
-
----
-
-# 📂 Project Structure
-
-The project is organized into modular components.
+## Repository layout
 
 ```text
 SwasthyaConnect/
-│
-├── frontend/
-│   └── Flutter application
-│
-├── backend/
-│   ├── controllers/
-│   ├── routes/
-│   ├── models/
-│   ├── middleware/
-│   ├── services/
-│   └── server configuration
-│
-├── ml_runtime/
-│   ├── preprocessing/
-│   ├── models/
-│   ├── inference/
-│   ├── quality_gate/
-│   └── visualization/
-│
-├── database/
-│   ├── schema/
-│   └── migrations/
-│
-├── docs/
-│   ├── architecture/
-│   ├── research/
-│   └── API documentation/
-│
-├── docker/
-│
-├── .env.example
-├── README.md
-└── ...
-```
-
-> Folder names may vary depending on the current implementation of the repository.
-
----
-
-# 🚀 Getting Started
-
-## 1. Clone the Repository
-
-```bash
-git clone https://github.com/pritam586/SwasthyaConnect.git
-cd SwasthyaConnect
+├── backend/                 FastAPI API (see backend/README.md)
+│   ├── app/                 config, models, schemas, controllers, routes, services, middleware, utils
+│   ├── alembic/             migrations
+│   ├── scripts/             seed_demo, create_admin, import_pharmacies, migrate_sqlite
+│   └── tests/
+├── frontend/                Next.js app (see frontend/README.md)
+│   └── src/                 app/ (route groups), features/, components/, services/, lib/, types/
+├── ml-service/              ML inference service (see ml-service/README.md)
+│   ├── app/                 quality gate, model loading, inference + Grad-CAM
+│   ├── training/            preprocess_dataset.py, train_cnn.py
+│   └── datasets/cp_anemic/  CP-AnemiC source and prepared split
+├── docs/                    UI brief, earlier architecture audit
+└── render.yaml              Render Blueprint (API, ML service, PostgreSQL)
 ```
 
 ---
 
-## 2. Backend Setup
+## Prerequisites
 
-Navigate to the backend directory:
+- Python 3.12
+- Node.js 20.19+ and npm
+- For the ML service: TensorFlow-capable machine or Docker (TensorFlow is about 2 GB installed)
+- Optional: PostgreSQL 15+ locally (SQLite is the default for development)
+
+---
+
+## Local development
+
+Run each service in its own terminal.
+
+**1. Backend** (`http://127.0.0.1:8000`, interactive docs at `/api/docs`)
 
 ```bash
 cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-dev.txt
+alembic upgrade head
+python -m scripts.seed_demo
+uvicorn app.main:app --reload --port 8000
 ```
 
-Install dependencies:
+On macOS/Linux, activate with `source .venv/bin/activate`. `seed_demo` creates a demo doctor (phone `9876543210`), a demo admin (phone `9999999999`), a medicine catalogue and five illustrative pharmacies. Passwords come from `DEMO_DOCTOR_PASSWORD` / `DEMO_ADMIN_PASSWORD` (defaults in `backend/.env.example`). It refuses to run in production.
+
+**2. ML service** (`http://127.0.0.1:8001`)
 
 ```bash
-npm install
+cd ml-service
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --port 8001
 ```
 
-Create the environment configuration:
+Screening stays "unavailable" until a trained, approved model is in `ml-service/models/` (see `ml-service/training/README.md`). Point the backend at it with `ML_SERVICE_URL=http://127.0.0.1:8001`.
 
-```bash
-cp .env.example .env
-```
-
-Configure required environment variables.
-
-Example:
-
-```env
-PORT=5000
-
-DATABASE_URL=your_database_url
-
-JWT_SECRET=your_jwt_secret
-
-CLIENT_URL=http://localhost:3000
-
-MAP_API_KEY=your_map_api_key
-
-TWILIO_ACCOUNT_SID=your_twilio_sid
-TWILIO_AUTH_TOKEN=your_twilio_token
-```
-
-Start the development server:
-
-```bash
-npm run dev
-```
-
----
-
-# 🧠 ML Runtime Setup
-
-Navigate to the ML directory:
-
-```bash
-cd ml_runtime
-```
-
-Create a Python virtual environment:
-
-```bash
-python -m venv venv
-```
-
-Activate it on Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run the inference/service according to the ML runtime configuration.
-
----
-
-# 📱 Flutter Setup
-
-Make sure Flutter is installed and configured.
-
-Check:
-
-```bash
-flutter doctor
-```
-
-Navigate to the Flutter application:
+**3. Frontend** (`http://localhost:3000`)
 
 ```bash
 cd frontend
+npm install
+npm run dev
 ```
 
-Install dependencies:
+With `NEXT_PUBLIC_API_BASE_URL` unset, the dev server proxies `/api` to `BACKEND_URL` (default `http://127.0.0.1:8000`).
+
+**Moving data from the old prototype** (one-off; keeps patients' passwords):
 
 ```bash
-flutter pub get
-```
-
-Run the application:
-
-```bash
-flutter run
+cd backend
+python -m scripts.migrate_sqlite --source ../legacy-data/ui_swasthya_connect.db --uploads ../legacy-data/ui_uploads
 ```
 
 ---
 
-# 🔑 Environment Variables
+## Tests and builds
 
-Never commit real secrets to GitHub.
-
-Use:
-
-```text
-.env
-```
-
-for local development and provide:
-
-```text
-.env.example
-```
-
-for other developers.
-
-Sensitive credentials may include:
-
-* Database credentials
-* JWT secrets
-* API keys
-* Cloud credentials
-* Twilio credentials
-* Healthcare integration credentials
+| Command (run in) | What it checks |
+| --- | --- |
+| `pytest` (`backend/`) | Auth, role and ownership rules, triage, screening, pharmacy, appointments, reports, settings |
+| `pytest` (`ml-service/`) | Quality gate, readiness and approval, class order, token check, Grad-CAM (skipped if TensorFlow cannot load) |
+| `npm run lint` (`frontend/`) | ESLint |
+| `npx tsc --noEmit` (`frontend/`) | Type check |
+| `npm run build` (`frontend/`) | Production build |
 
 ---
 
-# 🔄 Core User Workflow
+## Environment variables
 
-```text
-                    USER
-                     │
-                     ↓
-              Register / Login
-                     │
-                     ↓
-              Patient Dashboard
-                     │
-       ┌─────────────┼─────────────┐
-       ↓             ↓             ↓
-   Medical       Appointment    Screening
-    Records        Booking        Module
-       │             │             │
-       │             ↓             ↓
-       │           Doctor       Image Upload
-       │         Consultation       │
-       │             │              ↓
-       │             ↓         Quality Gate
-       │        Prescription        │
-       │                            ↓
-       └──────────────┬─────── ML Screening
-                      │
-                      ↓
-              Medicine Discovery
-                      │
-                      ↓
-               Nearby Pharmacy
-```
+Example values only; each service has an `.env.example`. Never commit real values.
 
----
+**backend** (Render service `swasthya-api`)
 
-# 🧪 Testing
+| Variable | Example | Notes |
+| --- | --- | --- |
+| `ENVIRONMENT` | `production` | Enables the production safety checks |
+| `DATABASE_URL` | `postgres://user:pass@host:5432/db` | Required in production; empty = local SQLite |
+| `JWT_SECRET` | 48+ random characters | Required in production (Render generates it) |
+| `CORS_ORIGINS` | `https://swasthyaconnect.vercel.app` | Comma-separated frontend origins |
+| `ML_SERVICE_URL` | `http://swasthya-ml:10000` | Empty = screening unavailable |
+| `ML_SERVICE_TOKEN` | random string | Must equal the ML service's value |
+| `ENABLE_DEV_OTP` | `false` | `true` only locally (returns the code in the API response) |
+| `REQUIRE_PHONE_VERIFICATION` | `false` | Set `true` once SMS works |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_VERIFY_SERVICE_SID` | | Real SMS OTP; also add `twilio` to `requirements.txt` |
+| `CLINIC_TIMEZONE` | `Asia/Kolkata` | Doctors' weekly hours |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` / `REFRESH_TOKEN_EXPIRE_DAYS` | `60` / `7` | |
+| `MAX_UPLOAD_MB`, `AUTH_RATE_LIMIT_PER_MINUTE`, `LOG_LEVEL` | `10`, `20`, `INFO` | |
 
-Testing should be performed at multiple levels.
+**ml-service** (Render private service `swasthya-ml`)
 
-### Backend
+| Variable | Notes |
+| --- | --- |
+| `ENVIRONMENT` | `production` makes `ML_SERVICE_TOKEN` mandatory |
+| `ML_SERVICE_TOKEN` | Shared with the backend |
+| `MODEL_BUNDLE_URL` / `MODEL_BUNDLE_SHA256` | Zip of `visual_screening.keras`, `metrics.json`, `model_validation.json`, fetched at startup |
+| `MODEL_DIR` | Defaults to `/srv/models` in the Docker image |
 
-* Unit testing
-* API testing
-* Authentication testing
-* Authorization testing
-* Input validation testing
+**frontend** (Vercel)
 
-### Frontend
-
-* UI testing
-* Form validation
-* Offline-mode testing
-* API failure handling
-
-### ML
-
-* Dataset validation
-* Image preprocessing tests
-* Quality-gate tests
-* Model evaluation
-* Confusion matrix
-* Precision
-* Recall
-* F1-score
-* Sensitivity
-* Specificity
-
-### Security
-
-* Authentication testing
-* JWT validation
-* Unauthorized-access testing
-* API rate-limit testing
-* Input sanitization
-* CORS validation
+| Variable | Notes |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Public URL of the Render API, e.g. `https://swasthya-api.onrender.com` |
+| `BACKEND_URL` | Local development proxy target only |
 
 ---
 
-# 📊 ML Evaluation
+## Deployment
 
-For research and academic evaluation, the screening model should be evaluated using appropriate metrics.
+### Backend, ML service and database: Render
 
-Recommended metrics include:
+1. Push this repository to GitHub.
+2. In Render: **New > Blueprint**, pick the repository. `render.yaml` creates `swasthya-db` (PostgreSQL), `swasthya-api` (web, Python) and `swasthya-ml` (private service, Docker), and generates `JWT_SECRET` and the shared `ML_SERVICE_TOKEN`.
+3. When prompted, set `CORS_ORIGINS` to your Vercel URL (you can fill it in after step 6 and redeploy). Optionally set the Twilio variables and `MODEL_BUNDLE_URL`.
+4. The API runs `alembic upgrade head` before every start, then `python -m app.server` on Render's `$PORT`. Health check: `GET /health`.
+5. Create the first administrator from the API service's **Shell** tab:
+   ```bash
+   python -m scripts.create_admin --name "Admin Name" --phone 9XXXXXXXXX --email admin@example.org
+   ```
+   Then load the real pharmacy dataset with `python -m scripts.import_pharmacies --medicines medicines.csv --pharmacies pharmacies.csv --stock stock.csv` (CSV formats are in the script's docstring), or add entries in the admin console.
 
-```text
-Accuracy
-Precision
-Recall / Sensitivity
-Specificity
-F1 Score
-ROC-AUC
-Confusion Matrix
-```
+### Frontend: Vercel
 
-Grad-CAM can be used to visualize regions contributing to the model's prediction.
+6. In Vercel: **Add New > Project**, import the repository, set **Root Directory** to `frontend` (framework is detected as Next.js), and add `NEXT_PUBLIC_API_BASE_URL` = the `swasthya-api` URL. Deploy.
+7. Put the Vercel URL into `CORS_ORIGINS` on Render and redeploy the API.
 
----
+### Plans and limits
 
-# 🔒 Privacy & Responsible AI
-
-Healthcare information is sensitive. SwasthyaConnect follows a privacy-first development approach.
-
-Important principles:
-
-* Collect only required information.
-* Protect authentication credentials.
-* Do not expose sensitive patient information through public APIs.
-* Use encrypted communication.
-* Restrict access using authorization.
-* Do not expose production secrets.
-* Clearly communicate that ML output is screening assistance.
-* Encourage professional medical evaluation for concerning results.
-
-### AI Disclaimer
-
-> SwasthyaConnect's AI module is intended for research, screening, and decision-support purposes. It does not provide a definitive medical diagnosis. Users should consult qualified healthcare professionals for diagnosis and treatment decisions.
+- Render's free PostgreSQL expires after 30 days; use a paid plan for real data. Uploaded files are stored in the database, so its size limit applies to them too.
+- Free Render web services sleep when idle (the first request after that is slow).
+- TensorFlow needs more memory than the smallest instances; `render.yaml` uses `starter` for the ML service. Move to `standard` if it runs out of memory. Private services are not on the free plan.
 
 ---
 
-# 🌐 Future Scope
+## Current limitations
 
-Future versions can include:
-
-* Advanced multilingual support
-* Voice-first healthcare interaction
-* Improved offline synchronization
-* More healthcare screening models
-* Real-time doctor availability
-* Pharmacy inventory integration
-* Medicine delivery integration
-* ABDM production integration
-* ABHA-based health-record interoperability
-* PM-JAY ecosystem integration
-* Advanced analytics dashboard
-* Wearable-device integration
-* Health-risk prediction
-* Expanded rural healthcare support
+| Area | Status |
+| --- | --- |
+| Screening model | Pipeline, quality gate, inference and Grad-CAM are implemented, but **no trained, approved model is in the repo**. Until one is deployed, screening reports "unavailable" and triage uses symptoms only. |
+| Eyes-defy-anemia dataset | Not yet added to preprocessing (CP-AnemiC only). |
+| Triage | Keyword rules over three fixed questions, not a clinical model. No speech-to-text, chatbot or LLM summary. |
+| ABHA / ABDM | Sandbox mode: format check plus consent; no live ABDM Sandbox calls. PM-JAY eligibility is a labelled mock and is never stored. |
+| SMS OTP | Twilio Verify is wired but untested here (needs credentials). Without it, production signup works without phone verification. |
+| Teleconsultation | "Consult now" sends a request the doctor confirms; there is no in-app video or voice call. |
+| Report reading | Medicines are matched from PDF text only; photos and scanned PDFs are stored but not read (no OCR). |
+| Offline-first sync, IVR channel | Not implemented. |
+| Rate limiting | Per instance (in memory). |
+| Hindi | Patient-facing pages only; clinician and admin pages are English. |
 
 ---
 
-# 📚 Research & Innovation Potential
+## Disclaimer
 
-SwasthyaConnect has potential for academic and research outcomes in areas such as:
-
-### 1. Conference Publication
-
-Possible research topics:
-
-* Offline-first telemedicine architecture for rural healthcare
-* AI-assisted anaemia screening
-* Image-quality-aware medical ML pipelines
-* Rural healthcare accessibility through digital platforms
-
-### 2. Journal Publication
-
-Possible areas:
-
-* Computer vision for anaemia screening
-* AI-assisted healthcare triage
-* Offline healthcare systems
-* Telemedicine in low-connectivity environments
-
-### 3. Patent
-
-Potentially patentable innovation may arise from a **novel technical combination or workflow**, subject to a proper prior-art and patentability assessment.
-
-### 4. Copyright
-
-Potential copyrightable components include:
-
-* Software source code
-* UI/UX implementation
-* Documentation
-* Original graphics
-* Original ML pipeline implementation
-
----
-
-# 👥 Contributors
-
-### SwasthyaConnect Team
-
-* **Pritam Prajapati**
-* **Pratik Singh**
-* **Sairaj Harpale**
-
-Additional contributors can be added as the project evolves.
-
----
-
-# 🤝 Contributing
-
-Contributions are welcome.
-
-1. Fork the repository.
-2. Create a feature branch.
-
-```bash
-git checkout -b feature/your-feature
-```
-
-3. Make your changes.
-4. Commit your changes.
-
-```bash
-git add -A
-git commit -m "Add your feature"
-```
-
-5. Push the branch.
-
-```bash
-git push origin feature/your-feature
-```
-
-6. Create a Pull Request.
-
----
-
-# 📄 License
-
-This project is currently developed as an academic/capstone project.
-
-The licensing terms may be updated after determining the project's publication, intellectual-property, and deployment requirements.
-
----
-
-# ⚠️ Disclaimer
-
-SwasthyaConnect is an academic and research-oriented healthcare technology project.
-
-It is **not a substitute for professional medical advice, diagnosis, or treatment**.
-
-Any AI-generated screening result should be reviewed by an appropriately qualified healthcare professional before making clinical decisions.
-
----
-
-# ⭐ Project Vision
-
-> **"Connecting people to healthcare, regardless of distance or connectivity."**
-
-SwasthyaConnect aims to combine **telemedicine, offline-first technology, AI-assisted screening, digital health records, medicine discovery, and pharmacy connectivity** into a single accessible healthcare platform for underserved communities.
+SwasthyaConnect is an academic project. It is not a substitute for professional medical advice, diagnosis or treatment.

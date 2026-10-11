@@ -1,0 +1,8 @@
+.venv
+__pycache__
+*.pyc
+tests
+training
+models
+data
+.env

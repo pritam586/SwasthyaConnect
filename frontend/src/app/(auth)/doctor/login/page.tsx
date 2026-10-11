@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button } from "@/components/common/Button";
-import { Card } from "@/components/common/Card";
-import { TextField } from "@/components/common/Field";
-import { homePathForRole, useAuth } from "@/providers/auth-provider";
+import { Button } from "@/components/ui/Button";
+import { TextField } from "@/components/ui/Field";
+import { useAuth } from "@/features/auth/auth-provider";
+import { AuthLayout, FormError } from "@/features/auth/AuthLayout";
+import { homePathForRole } from "@/lib/auth-storage";
 
 export default function ClinicianLoginPage() {
   const { clinicianLogin } = useAuth();
@@ -24,46 +25,30 @@ export default function ClinicianLoginPage() {
       const user = await clinicianLogin(identifier, password);
       router.replace(homePathForRole(user.role));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Clinician sign in failed.");
-    } finally {
+      setError(err instanceof Error ? err.message : "Sign in failed.");
       setLoading(false);
     }
   }
 
   return (
-    <main id="main" className="mx-auto max-w-md px-4 py-10">
-      <Link href="/login" className="text-sm font-semibold text-teal">
-        Patient sign in
-      </Link>
-      <h1 className="mt-4 text-3xl font-bold">Clinician sign in</h1>
-      <p className="mt-2 text-muted">Use the phone or email on your clinician account. No demo credentials are filled in.</p>
-      <Card className="mt-6">
-        <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <TextField
-            label="Phone or email"
-            name="identifier"
-            required
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-          />
-          <TextField
-            label="Password"
-            name="password"
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          {error ? (
-            <p className="text-sm font-medium text-red-700" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Checking…" : "Open workstation"}
-          </Button>
-        </form>
-      </Card>
-    </main>
+    <AuthLayout
+      title="Clinician sign in"
+      subtitle="For registered doctors and administrators."
+      footer={
+        <>
+          <p>New doctor? <Link className="font-semibold text-teal" href="/doctor/signup">Register for verification</Link></p>
+          <p><Link className="font-semibold text-teal" href="/login">Patient sign in</Link></p>
+        </>
+      }
+    >
+      <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
+        <TextField label="Mobile number or email" name="identifier" autoComplete="username" required
+                   value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
+        <TextField label="Password" name="password" type="password" autoComplete="current-password" required
+                   value={password} onChange={(e) => setPassword(e.target.value)} />
+        <FormError message={error} />
+        <Button type="submit" className="w-full" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</Button>
+      </form>
+    </AuthLayout>
   );
 }

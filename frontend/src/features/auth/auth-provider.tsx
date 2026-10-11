@@ -1,24 +1,18 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  clearSession,
-  getRefreshToken,
-  getStoredUser,
-  homePathForRole,
-  persistSession,
-  updateStoredUser,
-} from "@/lib/auth-storage";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { clearSession, getAccessToken, getRefreshToken, getStoredUser, persistSession, updateStoredUser } from "@/lib/auth-storage";
 import { authService } from "@/services/auth.service";
-import type { AuthUser, SignupPayload } from "@/types/user";
+import type { AuthResponse, AuthUser, DoctorSignup, PatientSignup } from "@/types/user";
 
 interface AuthContextValue {
   user: AuthUser | null;
   ready: boolean;
   login: (phone: string, password: string) => Promise<AuthUser>;
   clinicianLogin: (identifier: string, password: string) => Promise<AuthUser>;
-  signup: (payload: SignupPayload) => Promise<AuthUser>;
+  signup: (payload: PatientSignup) => Promise<AuthUser>;
+  doctorSignup: (payload: DoctorSignup) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -26,91 +20,65 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
-  const router = useRouter();
+
+  const refreshUser = useCallback(async () => {
+    const profile = await authService.me();
+    updateStoredUser(profile);
+    setUser(profile);
+  }, []);
 
   useEffect(() => {
-    const stored = getStoredUser();
-    if (stored) setUser(stored);
-    const tokenPresent = typeof window !== "undefined" && Boolean(localStorage.getItem("sc_access_token"));
-    if (!tokenPresent) {
+    if (!getAccessToken()) {
       setReady(true);
       return;
     }
-    authService
-      .me()
-      .then((profile) => {
-        setUser(profile);
-        updateStoredUser(profile);
-      })
+    setUser(getStoredUser());
+    // The stored copy is only a hint; the server decides who is signed in.
+    refreshUser()
       .catch(() => {
         clearSession();
         setUser(null);
       })
       .finally(() => setReady(true));
+  }, [refreshUser]);
+
+  const complete = useCallback((result: AuthResponse) => {
+    persistSession(result.access_token, result.refresh_token, result.user);
+    setUser(result.user);
+    return result.user;
   }, []);
 
-  const completeAuth = useCallback((token: string, refresh: string, nextUser: AuthUser) => {
-    persistSession(token, refresh, nextUser);
-    setUser(nextUser);
-    return nextUser;
-  }, []);
-
-  const login = useCallback(
-    async (phone: string, password: string) => {
-      const result = await authService.login(phone, password);
-      return completeAuth(result.token, result.refresh_token, result.user);
-    },
-    [completeAuth],
-  );
-
-  const clinicianLogin = useCallback(
-    async (identifier: string, password: string) => {
-      const result = await authService.clinicianLogin(identifier, password);
-      return completeAuth(result.token, result.refresh_token, result.user);
-    },
-    [completeAuth],
-  );
-
-  const signup = useCallback(
-    async (payload: SignupPayload) => {
-      const result = await authService.signup(payload);
-      return completeAuth(result.token, result.refresh_token, result.user);
-    },
-    [completeAuth],
-  );
-
-  const logout = useCallback(async () => {
-    const refresh = getRefreshToken();
-    try {
-      await authService.logout(refresh);
-    } catch {
-      /* still clear local session */
-    }
-    clearSession();
-    setUser(null);
-    router.replace("/login");
-  }, [router]);
-
-  const refreshUser = useCallback(async () => {
-    const profile = await authService.me();
-    setUser(profile);
-    updateStoredUser(profile);
-  }, []);
-
-  const value = useMemo(
-    () => ({ user, ready, login, clinicianLogin, signup, logout, refreshUser }),
-    [user, ready, login, clinicianLogin, signup, logout, refreshUser],
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      ready,
+      refreshUser,
+      login: async (phone, password) => complete(await authService.login(phone, password)),
+      clinicianLogin: async (identifier, password) => complete(await authService.clinicianLogin(identifier, password)),
+      signup: async (payload) => complete(await authService.signup(payload)),
+      doctorSignup: async (payload) => complete(await authService.doctorSignup(payload)),
+      logout: async () => {
+        try {
+          await authService.logout(getRefreshToken());
+        } catch {
+          // The local session is cleared even if the server cannot be reached.
+        }
+        clearSession();
+        setUser(null);
+        router.replace("/login");
+      },
+    }),
+    [user, ready, refreshUser, complete, router],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth must be used inside AuthProvider");
+  return context;
 }
-
-export { homePathForRole };

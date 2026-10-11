@@ -1,49 +1,47 @@
-# Sairaj Harpale module: visual anaemia screening
+# Visual anaemia screening: dataset preparation and training
 
-This module implements the first SwasthyaConnect module described in the project synopsis:
+Module 1 (Sairaj Harpale). These scripts produce the model that `ml-service/app` serves.
+Run every command from the `ml-service/` folder in an environment with `requirements-train.txt` installed.
 
-1. Guided conjunctiva-image capture in the patient app.
-2. Image-quality gate before inference.
-3. Conjunctiva crop preparation, size normalisation, and colour-ready image output.
-4. Leakage-safe training, validation, and test manifests for a future CNN.
-5. A future inference result containing a screening probability, confidence, and Grad-CAM image reference.
+## 1. Dataset preparation
 
-## Dataset preparation
+The CP-AnemiC archive contains duplicate images. A random image-level split would put the same eye in both training and testing and inflate accuracy, so `preprocess_dataset.py` removes identical files, excludes identical images with conflicting labels, and makes class-balanced, seeded splits (70 / 15 / 15).
 
-The CP-AnemiC archive includes duplicate images. A random image-level split would place the same eye image in training and testing, which would inflate reported accuracy. `preprocess_dataset.py` removes repeated identical files before creating class-balanced, deterministic splits. It also excludes any identical image that has conflicting labels.
-
-Run from the `ui` directory after extracting the archive:
+The raw archive and a prepared copy are already in `datasets/cp_anemic/` (`source/` and `prepared/`). To regenerate:
 
 ```powershell
-python ml/preprocess_dataset.py --source <extracted-cp-anemic-directory> --output ml/data/processed
+python training/preprocess_dataset.py --source datasets/cp_anemic/source --output data/processed
 ```
 
-The output contains `train`, `validation`, and `test` image folders, `manifest.csv`, and `summary.json`.
+The output holds `train/`, `validation/` and `test/` image folders, `manifest.csv` and `summary.json`. `data/` is git-ignored scratch space.
 
-## CNN training
+The Eyes-defy-anemia dataset (218 images) named in the synopsis is not yet included in this script.
 
-Install the isolated ML dependencies and train only after reviewing the processed-data summary:
+## 2. Training
 
 ```powershell
-python -m pip install -r ml/requirements-ml.txt
-python ml/train_cnn.py --data <prepared-directory> --output ml/models --epochs 20
+python training/train_cnn.py --data datasets/cp_anemic/prepared --output models --epochs 20 --imagenet
 ```
 
-`train_cnn.py` uses MobileNetV3Small and saves held-out test metrics. Those metrics must be reviewed across the dataset's demographic groups before any deployment decision.
+`train_cnn.py` fine-tunes the head of a frozen MobileNetV3Small and writes:
 
-## Model-serving contract
+- `models/visual_screening.keras`: the model
+- `models/metrics.json`: held-out test metrics and the class order (`labels`, `positive_class`)
 
-The eventual CNN endpoint should accept only an image that passes the quality gate and respond with:
+Keras sorts class folders alphabetically (`anemic`, `non_anemic`), so the sigmoid output is the probability of `labels[1]`. The service reads `metrics.json` to interpret it correctly.
+
+## 3. Approval
+
+Review `metrics.json`, ideally across the dataset's demographic groups, before use. Then create `models/model_validation.json`:
 
 ```json
-{
-  "screening_label": "anemia_likely | anemia_unlikely | inconclusive",
-  "confidence": 0.0,
-  "quality_passed": true,
-  "quality_reason": "",
-  "grad_cam_image_url": "",
-  "disclaimer": "Screening support only. A clinician must confirm with an appropriate clinical assessment."
-}
+{ "approved": true, "reviewed_by": "<name>", "reviewed_on": "<date>", "notes": "<what was checked>" }
 ```
 
-This module must never return a diagnosis, prescription, treatment recommendation, or emergency decision. The API returns HTTP 503 until both a model and an explicit `model_validation.json` approval record exist. The triage module owned by Pratik uses the visual output only as one input alongside symptom assessment.
+Until this file exists with `"approved": true`, the service answers HTTP 503 and the app shows "screening unavailable". It never falls back to a guessed result.
+
+## 4. Deployment
+
+Zip the three files (`visual_screening.keras`, `metrics.json`, `model_validation.json`), host the zip somewhere the service can download it (for example a GitHub release asset), and set `MODEL_BUNDLE_URL` (and optionally `MODEL_BUNDLE_SHA256`) on the ML service. Locally, put the files in `ml-service/models/`.
+
+The screening output is screening support only, never a diagnosis, prescription or emergency decision.

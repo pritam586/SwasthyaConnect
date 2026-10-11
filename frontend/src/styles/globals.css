@@ -31,36 +31,39 @@
   --font-sans: var(--font-plus-jakarta);
 }
 
-* {
-  box-sizing: border-box;
-}
+/* Base element styles live in the base layer so Tailwind utilities (e.g. text-white on a link) win. */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-html {
-  scroll-behavior: smooth;
-}
+  html {
+    scroll-behavior: smooth;
+  }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-plus-jakarta), "Segoe UI", sans-serif;
-  min-height: 100dvh;
-}
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-plus-jakarta), "Segoe UI", sans-serif;
+    min-height: 100dvh;
+  }
 
-a {
-  color: inherit;
-}
+  a {
+    color: inherit;
+  }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 
-:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
+  :focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+  }
 }
 
 .skip-link {

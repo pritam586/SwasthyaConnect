@@ -1,18 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { AuthProvider } from "@/providers/auth-provider";
-import "./globals.css";
+import { AuthProvider } from "@/features/auth/auth-provider";
+import { LanguageProvider } from "@/lib/i18n";
+import "@/styles/globals.css";
 
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-plus-jakarta",
-  display: "swap",
-});
+const plusJakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-plus-jakarta", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "SwasthyaConnect — Rural healthcare, closer to home",
+  title: "SwasthyaConnect: rural healthcare, closer to home",
   description:
-    "Telehealth, medical records, nearby pharmacies, and AI-assisted anaemia screening for underserved communities. Screening is not a medical diagnosis.",
+    "Telehealth, health records, nearby pharmacies and AI-assisted anaemia screening for rural communities. Screening is not a diagnosis.",
 };
 
 export const viewport: Viewport = {
@@ -29,7 +26,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <AuthProvider>{children}</AuthProvider>
+        <LanguageProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </LanguageProvider>
       </body>
     </html>
   );
