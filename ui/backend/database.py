@@ -17,7 +17,8 @@ from typing import Any
 
 logger = logging.getLogger("swasthya.database")
 
-DB_PATH = Path(os.getenv("SWASTHYA_DB_PATH", "swasthya_connect.db"))
+# Anchored to the ui/ folder so the same database is used whatever directory the server starts from.
+DB_PATH = Path(os.getenv("SWASTHYA_DB_PATH", Path(__file__).resolve().parent.parent / "swasthya_connect.db"))
 
 
 def get_db_connection() -> sqlite3.Connection:

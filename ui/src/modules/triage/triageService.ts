@@ -1,3 +1,5 @@
+import { authHeaders, errorMessage } from "../http"
+
 export type UrgencyLevel = "green" | "yellow" | "red"
 
 export type TriageSubmission = {
@@ -14,7 +16,7 @@ export type TriageSubmission = {
   visual_screening?: {
     status: "available" | "inconclusive" | "unavailable"
     confidence: number
-    screening_label: string
+    screening_label: "anemia_likely" | "anemia_unlikely" | "inconclusive"
     quality_passed: boolean
   }
 }
@@ -31,12 +33,12 @@ export type TriageAssessmentResult = {
 export async function submitTriageAssessment(input: TriageSubmission): Promise<TriageAssessmentResult> {
   const response = await fetch("/api/v1/triage/assess", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(input),
   })
   const payload = await response.json()
   if (!response.ok) {
-    throw new Error(payload.detail || "Triage assessment failed.")
+    throw new Error(errorMessage(payload, "Triage assessment failed."))
   }
   return payload
 }

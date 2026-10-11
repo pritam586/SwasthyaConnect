@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { translations, Language } from "./i18n"
 import { checkUserExists, requestPhoneOtp, registerUser, loginUser, loginDoctor, UserProfile } from "./modules/auth/authService"
-import { submitTriageAssessment, TriageAssessmentResult } from "./modules/triage/triageService"
+import { submitTriageAssessment, TriageAssessmentResult, TriageSubmission } from "./modules/triage/triageService"
 import { fetchClinicianCases, submitPrescription, ClinicianCase } from "./modules/clinicalWorkflow/clinicalWorkflowService"
 import { requestAbhaLink } from "./modules/abha/abhaService"
 import { requestVisualScreening, VisualScreeningServiceError } from "./modules/visualScreening"
@@ -955,14 +955,14 @@ function AbhaScreen({
   const handleLink = async () => {
     try {
       const res = await requestAbhaLink(abhaInput, true, false)
+      setStatusMsg(res.message)
       if (res.linked && res.abha_number) {
         setUser({ ...user, abha_id: res.abha_number, pmjay_eligible: res.pmjay_eligible })
-        setStatusMsg(res.message)
         setTimeout(() => goto("consent"), 800)
       }
-    } catch {
-      setUser({ ...user, abha_id: "12-3456-7890-1234", pmjay_eligible: true })
-      goto("consent")
+    } catch (err: any) {
+      // Never assign a placeholder ABHA ID or eligibility: the patient can retry or skip.
+      setStatusMsg(err?.message || "ABHA linking is unavailable right now. Try again or skip.")
     }
   }
 
@@ -1289,7 +1289,8 @@ function ScreeningResult({
                 {aiScreeningResult.label === "anemia_likely" ? t("pallorDetected") : t("normalErythema")}
               </div>
               <div className="text-amber-700 text-xs font-semibold">
-                {t("cnnConfidence")}: {((aiScreeningResult.confidence || 0.78) * 100).toFixed(1)}%
+                {/* The API already returns a percentage (0-100). */}
+                {t("cnnConfidence")}: {(aiScreeningResult.confidence ?? 0).toFixed(1)}%
               </div>
             </div>
           </div>
@@ -1406,15 +1407,48 @@ function ScreeningResult({
 
 // ─── SCREEN 10: Symptom Chat (Module 2 - Pratik Singh) ────────────────────────
 
+type AiScreeningResult = {
+  available: boolean
+  qualityPassed?: boolean
+  qualityReason?: string
+  label?: string
+  confidence?: number
+  gradCamUrl?: string
+  message?: string
+}
+
+// Fixed English statements per question, indexed by option (daily, sometimes, rarely).
+// The triage engine matches English keywords, so the displayed (possibly Hindi) text is not sent.
+const SYMPTOM_STATEMENTS = [
+  ["fatigue or low energy most days", "fatigue or low energy occasionally", "no tiredness or low energy"],
+  ["breathless on exertion most days", "breathless on exertion occasionally", "no breathing difficulty on exertion"],
+  ["dizzy, headache or palpitations most days", "dizzy, headache or palpitations occasionally", "no light-headedness or head pain"],
+]
+
+function toVisualScreening(result: AiScreeningResult | null): TriageSubmission["visual_screening"] {
+  const label = result?.label
+  if (!result?.available || (label !== "anemia_likely" && label !== "anemia_unlikely" && label !== "inconclusive")) {
+    return { status: "unavailable", confidence: 0, screening_label: "inconclusive", quality_passed: false }
+  }
+  return {
+    status: label === "inconclusive" ? "inconclusive" : "available",
+    confidence: result.confidence ?? 0,
+    screening_label: label,
+    quality_passed: result.qualityPassed === true,
+  }
+}
+
 function SymptomChat({
   goto,
   lang,
   user,
+  aiScreeningResult,
   setTriageResult,
 }: {
   goto: (s: Screen) => void
   lang: Language
   user: UserProfile
+  aiScreeningResult: AiScreeningResult | null
   setTriageResult: (res: TriageAssessmentResult) => void
 }) {
   const t = (k: keyof typeof translations.en) => (translations[lang] || translations.en)[k] || translations.en[k]
@@ -1426,12 +1460,43 @@ function SymptomChat({
   ])
   const [answers, setAnswers] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [submitError, setSubmitError] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const questions = [t("q1"), t("q2"), t("q3")]
 
-  const handleSelect = async (ans: string) => {
-    const updatedAnswers = [...answers, ans]
+  const submitAssessment = async (symptomAnswers: string[]) => {
+    setLoading(true)
+    setSubmitError("")
+    try {
+      const result = await submitTriageAssessment({
+        user_id: user.id,
+        patient_name: user.name,
+        age: String(user.age),
+        gender: user.gender,
+        phone: user.phone,
+        location: user.location,
+        abha_id: user.abha_id,
+        pmjay_eligible: user.pmjay_eligible,
+        symptom_answers: symptomAnswers,
+        visual_screening: toVisualScreening(aiScreeningResult),
+      })
+      setTriageResult(result)
+      setTimeout(() => goto("triageResult"), 700)
+    } catch {
+      // Never invent an urgency level: show the failure and let the patient retry.
+      setSubmitError(
+        lang === "hi"
+          ? "ट्रायज सेवा से संपर्क नहीं हो सका। कृपया पुनः प्रयास करें।"
+          : "Could not reach the triage service. No result was generated. Please try again.",
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSelect = async (ans: string, optionIndex: number) => {
+    const updatedAnswers = [...answers, SYMPTOM_STATEMENTS[step][optionIndex]]
     setAnswers(updatedAnswers)
     setMessages((prev) => [...prev, { from: "user", text: ans }])
 
@@ -1441,42 +1506,9 @@ function SymptomChat({
         setMessages((prev) => [...prev, { from: "bot", text: questions[step + 1] }])
       }, 500)
     } else {
-      // Completed all 3 questions -> Submit to backend AI Triage Engine!
-      setLoading(true)
-      try {
-        const result = await submitTriageAssessment({
-          user_id: user.id,
-          patient_name: user.name,
-          age: String(user.age),
-          gender: user.gender,
-          phone: user.phone,
-          location: user.location,
-          abha_id: user.abha_id,
-          pmjay_eligible: user.pmjay_eligible,
-          symptom_answers: updatedAnswers,
-          visual_screening: {
-            status: "available",
-            confidence: 78.4,
-            screening_label: "anemia_likely",
-            quality_passed: true,
-          },
-        })
-        setTriageResult(result)
-        setTimeout(() => goto("triageResult"), 700)
-      } catch {
-        // Fallback result for offline test
-        setTriageResult({
-          case_id: "SC-" + Math.floor(1000 + Math.random() * 9000),
-          urgency: "yellow",
-          ai_summary: `${user.name} shows conjunctival pallor with ongoing exertional fatigue.`,
-          explainability_note: "Multi-modal fusion assigned Yellow priority. Doctor review recommended.",
-          visual_confidence: 78.4,
-          disclaimer: t("responsibleAiNoteBody"),
-        })
-        setTimeout(() => goto("triageResult"), 700)
-      } finally {
-        setLoading(false)
-      }
+      // Completed all 3 questions -> submit to the backend triage engine.
+      setStep(step + 1)
+      await submitAssessment(updatedAnswers)
     }
   }
 
@@ -1507,6 +1539,17 @@ function SymptomChat({
               </div>
             </div>
           )}
+          {submitError && !loading && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold space-y-2">
+              <div>{submitError}</div>
+              <button
+                onClick={() => submitAssessment(answers)}
+                className="px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold"
+              >
+                {lang === "hi" ? "पुनः प्रयास करें" : "Try again"}
+              </button>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
 
@@ -1516,7 +1559,7 @@ function SymptomChat({
             {[t("optYesDaily"), t("optSometimes"), t("optRarely")].map((opt, i) => (
               <button
                 key={i}
-                onClick={() => handleSelect(opt)}
+                onClick={() => handleSelect(opt, i)}
                 className="w-full py-3 px-4 rounded-xl border-2 border-slate-200 hover:border-teal-500 hover:bg-teal-50 font-bold text-xs text-slate-700 text-left transition-all"
               >
                 {opt}
@@ -1547,7 +1590,8 @@ function TriageResultScreen({
     triageResult?.urgency || "yellow"
   )
 
-  const caseId = triageResult?.case_id || "SC-6559"
+  const caseId = triageResult?.case_id || "—"
+  const visualConfidence = triageResult?.visual_confidence ?? 0
 
   return (
     <MobileShell>
@@ -1602,11 +1646,13 @@ function TriageResultScreen({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">{t("visualSignal")}:</span>
-              <span className="font-bold text-amber-700">78.4% Pallor (MobileNetV3)</span>
+              <span className="font-bold text-amber-700">
+                {visualConfidence > 0 ? `${visualConfidence.toFixed(1)}% confidence` : "No usable screening result"}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">{t("symptomSignal")}:</span>
-              <span className="font-bold text-slate-800">Fatigue & Breathlessness</span>
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500 flex-shrink-0">{t("symptomSignal")}:</span>
+              <span className="font-bold text-slate-800 text-right">{triageResult?.ai_summary || "—"}</span>
             </div>
             <div className="flex justify-between border-t pt-2">
               <span className="font-bold text-slate-700">Case ID:</span>
@@ -1814,10 +1860,12 @@ function TeleconsultScreen({
   goto,
   lang,
   user,
+  triageResult,
 }: {
   goto: (s: Screen) => void
   lang: Language
   user: UserProfile
+  triageResult: TriageAssessmentResult | null
 }) {
   const t = (k: keyof typeof translations.en) => (translations[lang] || translations.en)[k] || translations.en[k]
   const [timer, setTimer] = useState(0)
@@ -1847,7 +1895,13 @@ function TeleconsultScreen({
           <div className="bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/10 text-left max-w-xs w-full text-white text-xs space-y-1">
             <div className="text-white/60 font-bold uppercase text-[10px]">{t("patientContext")}</div>
             <div className="font-bold text-sm">{user.name} ({user.age} yrs, {user.gender})</div>
-            <div className="text-amber-400 font-semibold">Visual Pallor: 78.4% · Urgency: Yellow</div>
+            <div className="text-amber-400 font-semibold">
+              Visual:{" "}
+              {triageResult && triageResult.visual_confidence > 0
+                ? `${triageResult.visual_confidence.toFixed(1)}%`
+                : "no result"}{" "}
+              · Urgency: {triageResult ? triageResult.urgency.charAt(0).toUpperCase() + triageResult.urgency.slice(1) : "—"}
+            </div>
           </div>
         </div>
 
@@ -2024,8 +2078,12 @@ function DoctorDashboard({ goto, lang }: { goto: (s: Screen) => void; lang: Lang
   const [selIdx, setSelIdx] = useState<number>(0)
   const [showHeatmap, setShowHeatmap] = useState(false)
   const [rxNotes, setRxNotes] = useState("")
+  const [diagnosis, setDiagnosis] = useState("")
   const [rxSent, setRxSent] = useState(false)
+  const [rxSending, setRxSending] = useState(false)
+  const [rxError, setRxError] = useState("")
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     fetchClinicianCases()
@@ -2034,27 +2092,43 @@ function DoctorDashboard({ goto, lang }: { goto: (s: Screen) => void; lang: Lang
         setLoading(false)
       })
       .catch(() => {
+        setLoadError("Could not load the case queue. Sign in with a doctor account and try again.")
         setLoading(false)
       })
   }, [])
 
+  // A new case starts with an empty prescription form.
+  useEffect(() => {
+    setRxSent(false)
+    setRxError("")
+    setRxNotes("")
+    setDiagnosis("")
+  }, [selIdx])
+
   const sel = cases[selIdx] || null
 
   const handleSendRx = async () => {
-    if (!sel) return
-    setRxSent(true)
+    if (!sel || rxSending || rxSent) return
+    if (diagnosis.trim().length < 3) {
+      setRxError("Enter the final diagnosis before sending the prescription.")
+      return
+    }
+    setRxSending(true)
+    setRxError("")
     try {
       await submitPrescription(sel.id, {
-        doctor_name: "Dr. Anjali Verma",
-        diagnosis: "Microcytic Hypochromic Anaemia",
+        diagnosis: diagnosis.trim(),
         clinical_notes: rxNotes || "Prescribed standard iron + folic acid course.",
         medicines: [
-          { name: "Ferrous Sulfate 200mg", freq: "Once daily after food · 90 days" },
-          { name: "Folic Acid 5mg", freq: "Once daily · 90 days" },
+          { name: "Ferrous Sulfate 200mg", dosage: "1 tablet", frequency: "Once daily after food", duration: "90 days" },
+          { name: "Folic Acid 5mg", dosage: "1 tablet", frequency: "Once daily", duration: "90 days" },
         ],
       })
-    } catch {
-      // ignore
+      setRxSent(true)
+    } catch (err: any) {
+      setRxError(err?.message || "Failed to submit prescription.")
+    } finally {
+      setRxSending(false)
     }
   }
 
@@ -2095,6 +2169,8 @@ function DoctorDashboard({ goto, lang }: { goto: (s: Screen) => void; lang: Lang
 
           {loading ? (
             <div className="p-6 text-center text-xs text-slate-400">Loading cases from database...</div>
+          ) : loadError ? (
+            <div className="p-6 text-center text-xs text-red-600 font-semibold">{loadError}</div>
           ) : (
             cases.map((c, i) => (
               <button
@@ -2223,19 +2299,29 @@ function DoctorDashboard({ goto, lang }: { goto: (s: Screen) => void; lang: Lang
                       Folic Acid 5mg (Daily)
                     </div>
                   </div>
+                  <input
+                    value={diagnosis}
+                    onChange={(e) => setDiagnosis(e.target.value)}
+                    disabled={rxSent}
+                    placeholder="Final diagnosis (required)"
+                    className="w-full p-2.5 border rounded-xl text-xs outline-none focus:border-teal-400"
+                  />
                   <textarea
                     value={rxNotes}
                     onChange={(e) => setRxNotes(e.target.value)}
-                    placeholder="Doctor clinical instructions / diagnosis notes..."
+                    disabled={rxSent}
+                    placeholder="Clinical instructions for the patient..."
                     className="flex-1 w-full p-2.5 border rounded-xl text-xs outline-none focus:border-teal-400 min-h-[70px]"
                   />
+                  {rxError && <div className="text-[11px] text-red-600 font-semibold">{rxError}</div>}
                   <button
                     onClick={handleSendRx}
+                    disabled={rxSending || rxSent}
                     className={`w-full py-2.5 rounded-xl font-bold text-xs transition-colors ${
-                      rxSent ? "bg-emerald-600 text-white" : "bg-teal-600 hover:bg-teal-700 text-white"
+                      rxSent ? "bg-emerald-600 text-white" : "bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-60"
                     }`}
                   >
-                    {rxSent ? "✓ Prescription Sent to Pharmacy" : "Send Prescription →"}
+                    {rxSent ? "✓ Prescription Sent to Pharmacy" : rxSending ? "Sending..." : "Send Prescription →"}
                   </button>
                   {rxSent && (
                     <div className="text-[10px] text-emerald-700 font-bold text-center">
@@ -2266,15 +2352,7 @@ export default function App() {
   const [capturedEyeImage, setCapturedEyeImage] = useState<string | null>(null)
   const [eyeQualityPassed, setEyeQualityPassed] = useState<boolean>(true)
   const [eyeQualityReason, setEyeQualityReason] = useState<string>("")
-  const [aiScreeningResult, setAiScreeningResult] = useState<{
-    available: boolean
-    qualityPassed?: boolean
-    qualityReason?: string
-    label?: string
-    confidence?: number
-    gradCamUrl?: string
-    message?: string
-  } | null>(null)
+  const [aiScreeningResult, setAiScreeningResult] = useState<AiScreeningResult | null>(null)
 
   // Medicine & Pharmacy Locator navigation state
   const [pharmacySelectedMed, setPharmacySelectedMed] = useState<string>("")
@@ -2383,7 +2461,15 @@ export default function App() {
           aiScreeningResult={aiScreeningResult}
         />
       )}
-      {screen === "symptomChat" && <SymptomChat goto={goto} lang={lang} user={user} setTriageResult={setTriageResult} />}
+      {screen === "symptomChat" && (
+        <SymptomChat
+          goto={goto}
+          lang={lang}
+          user={user}
+          aiScreeningResult={aiScreeningResult}
+          setTriageResult={setTriageResult}
+        />
+      )}
       {screen === "triageResult" && <TriageResultScreen goto={goto} lang={lang} user={user} triageResult={triageResult} />}
       {screen === "selfCare" && (
         <SelfCarePlan
@@ -2413,7 +2499,7 @@ export default function App() {
       )}
       {screen === "visitSavedGreen" && <VisitSaved goto={goto} lang={lang} variant="green" />}
       {screen === "connectingDoctor" && <ConnectingDoctor goto={goto} lang={lang} user={user} />}
-      {screen === "teleconsult" && <TeleconsultScreen goto={goto} lang={lang} user={user} />}
+      {screen === "teleconsult" && <TeleconsultScreen goto={goto} lang={lang} user={user} triageResult={triageResult} />}
       {screen === "prescriptionReceived" && (
         <PrescriptionReceived
           goto={goto}

@@ -1,3 +1,5 @@
+import { errorMessage } from "../http"
+
 export type AbhaLinkResponse = {
   integration_status: "linked" | "optional_skipped" | "sandbox_mode"
   linked: boolean
@@ -22,7 +24,8 @@ export async function requestAbhaLink(
     }),
   })
   if (!response.ok) {
-    throw new Error("ABHA request failed.")
+    const payload = (await response.json().catch(() => null)) as { detail?: unknown } | null
+    throw new Error(errorMessage(payload, "ABHA request failed."))
   }
   return response.json()
 }

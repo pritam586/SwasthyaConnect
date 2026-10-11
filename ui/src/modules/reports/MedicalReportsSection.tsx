@@ -31,7 +31,7 @@ export function MedicalReportsSection({
 
   const loadReports = async () => {
     try {
-      const data = await fetchUserReports(user.id)
+      const data = await fetchUserReports()
       setReports(data)
     } catch (e) {
       console.warn("Could not load reports", e)

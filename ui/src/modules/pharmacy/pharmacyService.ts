@@ -2,7 +2,7 @@
  * Pharmacy & Medicine Locator Service for SwasthyaConnect.
  * Communicates with backend endpoints:
  * - GET /api/v1/pharmacies/nearby
- * - POST /api/v1/pharmacies/find-all-medicines
+ * - POST /api/v1/pharmacies/search-prescription
  * - GET /api/v1/medicines/search
  */
 
@@ -69,7 +69,7 @@ export async function findAllPrescriptionMedicines(
   medicines: string[],
   radiusKm = 30.0
 ): Promise<PharmacyNearbyResult[]> {
-  const res = await fetch(`/api/v1/pharmacies/find-all-medicines`, {
+  const res = await fetch("/api/v1/pharmacies/search-prescription", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -86,7 +86,7 @@ export async function findAllPrescriptionMedicines(
 }
 
 export async function searchMedicinesCatalogue(query: string): Promise<any[]> {
-  const res = await fetch(`/api/v1/medicines/search?query=${encodeURIComponent(query)}`)
+  const res = await fetch(`/api/v1/medicines/search?q=${encodeURIComponent(query)}`)
   if (!res.ok) {
     throw new Error(`Failed to search medicines: ${res.statusText}`)
   }

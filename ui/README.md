@@ -1,5 +1,16 @@
 # SwasthyaConnect
 
+This repository contains the active product implementation for the SwasthyaConnect healthcare application.
+
+## Active project layout
+
+- `src/` — Vite + React client app.
+- `backend/` — FastAPI gateway and service layer.
+- `ml/` — ML inference boundary and visual screening integration.
+- `uploads/` — uploaded medical reports and generated heatmaps.
+
+The older `frontend/` Next.js scaffold at the repository root is a legacy prototype and not the active application entry point.
+
 This repository currently implements Sairaj Harpale's Module 1: guided conjunctiva-image capture and a future visual anaemia screening API boundary.
 
 ## Safety contract

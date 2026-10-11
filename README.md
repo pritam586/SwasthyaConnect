@@ -2,6 +2,18 @@
 
 ### Offline-First Rural Healthcare & Telemedicine Platform
 
+## Repository Audit Summary
+
+The live product implementation is centered in the `ui/` workspace:
+
+- `ui/src/` contains the React/Vite patient-facing application.
+- `ui/backend/` contains the FastAPI API gateway and domain services.
+- `ui/ml/` contains the ML inference boundary and visual screening workflow.
+- `ui/uploads/` stores patient report files and generated Grad-CAM heatmaps.
+
+The legacy `frontend/` folder is a separate Next.js scaffold created during initial prototyping. It is not wired into the production service flow and is intentionally left in place for reference rather than deleted until the current app is fully retired. The active developer workflow is to run the backend from `ui/backend/app.py` and the frontend from `ui/`.
+
+
 SwasthyaConnect is an **offline-first digital healthcare platform** designed to improve access to healthcare services for people in rural and underserved areas.
 
 The platform connects **patients, doctors, pharmacies, and healthcare services** through a unified system. It provides teleconsultation, medical-record management, medicine discovery, nearby pharmacy discovery, appointment management, and AI-assisted **anaemia screening with image-quality validation**.

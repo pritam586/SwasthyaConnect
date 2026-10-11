@@ -1,3 +1,5 @@
+import { errorMessage } from "../http"
+
 export type UserProfile = {
   id: string
   phone: string
@@ -52,7 +54,7 @@ export async function registerUser(data: {
     body: JSON.stringify(data),
   })
   const payload = await res.json()
-  if (!res.ok) throw new Error(payload.detail || "Registration failed.")
+  if (!res.ok) throw new Error(errorMessage(payload, "Registration failed."))
   return payload
 }
 
@@ -63,7 +65,7 @@ export async function loginUser(phone: string, password: string): Promise<AuthRe
     body: JSON.stringify({ phone, password }),
   })
   const payload = await res.json()
-  if (!res.ok) throw new Error(payload.detail || "Login failed.")
+  if (!res.ok) throw new Error(errorMessage(payload, "Login failed."))
   return payload
 }
 
@@ -74,6 +76,6 @@ export async function loginDoctor(phone_or_email: string, password: string): Pro
     body: JSON.stringify({ phone_or_email, password }),
   })
   const payload = await res.json()
-  if (!res.ok) throw new Error(payload.detail || "Doctor login failed.")
+  if (!res.ok) throw new Error(errorMessage(payload, "Doctor login failed."))
   return payload
 }

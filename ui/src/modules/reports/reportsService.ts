@@ -2,10 +2,14 @@
  * Medical Reports & Appointment Service for SwasthyaConnect.
  * Communicates with backend endpoints:
  * - POST /api/v1/reports/upload
- * - GET /api/v1/reports/user/{userId}
+ * - GET /api/v1/reports/my
  * - POST /api/v1/appointments/book
- * - GET /api/v1/appointments/patient/{patientId}
+ * - GET /api/v1/appointments/my
+ *
+ * All four routes identify the patient from the access token, not from a user ID in the URL.
  */
+
+import { authHeaders, errorMessage } from "../http"
 
 export interface ExtractedMedicine {
   name: string
@@ -55,12 +59,13 @@ export async function uploadMedicalReport(
 
   const res = await fetch("/api/v1/reports/upload", {
     method: "POST",
+    headers: authHeaders(undefined, false),
     body: formData,
   })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Upload failed" }))
-    throw new Error(err.detail || "Failed to upload medical report")
+    throw new Error(errorMessage(err, "Failed to upload medical report"))
   }
 
   const data = await res.json()
@@ -79,8 +84,8 @@ export async function uploadMedicalReport(
   }
 }
 
-export async function fetchUserReports(userId: string): Promise<MedicalReportRecord[]> {
-  const res = await fetch(`/api/v1/reports/user/${encodeURIComponent(userId)}`)
+export async function fetchUserReports(): Promise<MedicalReportRecord[]> {
+  const res = await fetch("/api/v1/reports/my", { headers: authHeaders() })
   if (!res.ok) {
     throw new Error(`Failed to fetch user reports: ${res.statusText}`)
   }
@@ -111,7 +116,7 @@ export async function bookAppointmentSlot(
 ): Promise<{ success: boolean; appointment_id: string; message: string }> {
   const res = await fetch("/api/v1/appointments/book", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify({
       patient_id: patientId,
       patient_name: patientName,
@@ -125,14 +130,14 @@ export async function bookAppointmentSlot(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Booking failed" }))
-    throw new Error(err.detail || "Failed to book appointment")
+    throw new Error(errorMessage(err, "Failed to book appointment"))
   }
 
   return res.json()
 }
 
-export async function fetchPatientAppointments(patientId: string): Promise<AppointmentRecord[]> {
-  const res = await fetch(`/api/v1/appointments/patient/${encodeURIComponent(patientId)}`)
+export async function fetchPatientAppointments(): Promise<AppointmentRecord[]> {
+  const res = await fetch("/api/v1/appointments/my", { headers: authHeaders() })
   if (!res.ok) {
     throw new Error(`Failed to fetch patient appointments: ${res.statusText}`)
   }

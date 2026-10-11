@@ -36,14 +36,18 @@ from .pharmacy_service import med_router, router as pharmacy_router
 from .reports_service import router as reports_router
 from .triage.service import router as triage_router
 from .abha.service import router as abha_router
-from ..ml.inference_service import router as visual_screening_router
+
+try:
+    from ..ml.inference_service import router as visual_screening_router
+except ImportError:  # pragma: no cover - supports direct execution from the ui directory
+    from ml.inference_service import router as visual_screening_router
 
 # Initialize database schema and baseline data
 init_db()
 seed_directory_data_if_empty()
 
-# Ensure uploads directories exist
-UPLOADS_DIR = Path("uploads")
+# Ensure uploads directories exist relative to the ui project root.
+UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
 (UPLOADS_DIR / "reports").mkdir(parents=True, exist_ok=True)
 (UPLOADS_DIR / "heatmaps").mkdir(parents=True, exist_ok=True)
 

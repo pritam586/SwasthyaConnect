@@ -1,3 +1,5 @@
+import { authHeaders, errorMessage } from "../http"
+
 export type ClinicianCase = {
   id: string
   patient_name: string
@@ -17,8 +19,17 @@ export type ClinicianCase = {
   created_at: string
 }
 
+/** Matches PrescriptionMedicineItem in backend/clinical_workflow/service.py. */
+export type PrescriptionMedicine = {
+  name: string
+  dosage: string
+  frequency: string
+  duration: string
+  instructions?: string
+}
+
 export async function fetchClinicianCases(): Promise<ClinicianCase[]> {
-  const response = await fetch("/api/v1/clinical-workflow/cases")
+  const response = await fetch("/api/v1/clinical-workflow/cases", { headers: authHeaders() })
   if (!response.ok) {
     throw new Error("Failed to load clinician cases from server.")
   }
@@ -28,20 +39,19 @@ export async function fetchClinicianCases(): Promise<ClinicianCase[]> {
 export async function submitPrescription(
   caseId: string,
   data: {
-    doctor_id?: string
-    doctor_name: string
     diagnosis: string
     clinical_notes: string
-    medicines: Array<{ name: string; freq: string }>
+    medicines: PrescriptionMedicine[]
   }
 ): Promise<{ success: boolean; message: string }> {
   const response = await fetch(`/api/v1/clinical-workflow/cases/${caseId}/prescription`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(data),
   })
   if (!response.ok) {
-    throw new Error("Failed to submit prescription.")
+    const payload = (await response.json().catch(() => null)) as { detail?: unknown } | null
+    throw new Error(errorMessage(payload, "Failed to submit prescription."))
   }
   return response.json()
 }

@@ -1,3 +1,5 @@
+import { authHeaders, errorMessage } from "./http"
+
 export type VisualScreeningLabel = "anemia_likely" | "anemia_unlikely" | "inconclusive"
 
 export type VisualScreeningResult = {
@@ -38,12 +40,13 @@ export async function requestVisualScreening(image: File): Promise<VisualScreeni
   const body = new FormData()
   body.append("image", image)
 
-  const response = await fetch(endpoint, { method: "POST", body })
+  // The token lets the backend save the result to the patient record; screening still works without it.
+  const response = await fetch(endpoint, { method: "POST", headers: authHeaders(undefined, false), body })
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { detail?: string } | null
+    const payload = await response.json().catch(() => null)
     throw new VisualScreeningServiceError(
       response.status,
-      payload?.detail ?? "Visual screening is unavailable. No result was generated.",
+      errorMessage(payload, "Visual screening is unavailable. No result was generated."),
     )
   }
   const result: unknown = await response.json().catch(() => null)

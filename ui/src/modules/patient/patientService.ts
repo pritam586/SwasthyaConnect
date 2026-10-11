@@ -16,6 +16,8 @@
  * - GET /api/v1/doctors
  */
 
+import { authHeaders } from "../http"
+
 export interface PatientMedication {
   id: string
   patient_id: string
@@ -90,14 +92,6 @@ export interface DoctorProfile {
   consultation_fee: number
   profile_image_url?: string
   rating: number
-}
-
-function authHeaders(token?: string) {
-  const t = token || localStorage.getItem("sc_token") || ""
-  return {
-    "Content-Type": "application/json",
-    ...(t ? { Authorization: `Bearer ${t}` } : {}),
-  }
 }
 
 export async function fetchMyProfile(token?: string): Promise<any> {

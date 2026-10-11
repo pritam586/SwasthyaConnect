@@ -3,3 +3,6 @@ uvicorn[standard]>=0.27
 python-multipart>=0.0.9
 Pillow>=10.0
 openpyxl>=3.1
+PyJWT>=2.8
+numpy>=1.26
+pypdf>=4.0

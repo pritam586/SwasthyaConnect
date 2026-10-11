@@ -26,11 +26,17 @@ DISCLAIMER = (
 
 
 class VisualScreeningContext(BaseModel):
-    status: Literal["available", "inconclusive", "unavailable"] = "available"
-    confidence: float = 78.4
-    screening_label: str = "anemia_likely"
-    quality_passed: bool = True
+    # No clinical defaults: a missing field must never turn into a pallor finding.
+    status: Literal["available", "inconclusive", "unavailable"] = "unavailable"
+    confidence: float = Field(default=0.0, ge=0.0, le=100.0)
+    screening_label: Literal["anemia_likely", "anemia_unlikely", "inconclusive"] = "inconclusive"
+    quality_passed: bool = False
     grad_cam_url: str | None = None
+
+    @property
+    def usable(self) -> bool:
+        """Only a quality-approved, available result may influence triage."""
+        return self.status == "available" and self.quality_passed and self.screening_label != "inconclusive"
 
 
 class TriageSubmissionRequest(BaseModel):
@@ -74,30 +80,37 @@ def compute_multimodal_urgency(
         for kw in ["shortness of breath", "breathless", "dizzy", "headache", "most days", "often", "fatigue"]
     )
 
-    visual_conf = visual.confidence if visual and visual.status == "available" else 50.0
-    pallor_detected = visual and visual.screening_label == "anemia_likely"
+    usable_visual = visual is not None and visual.usable
+    visual_conf = visual.confidence if usable_visual else 0.0
+    pallor_detected = usable_visual and visual.screening_label == "anemia_likely"
+
+    # Describe only the evidence that was actually provided.
+    if pallor_detected:
+        visual_finding = f"conjunctival pallor flagged by visual screening ({visual_conf:.1f}% confidence)"
+    elif usable_visual:
+        visual_finding = f"no conjunctival pallor flagged by visual screening ({visual_conf:.1f}% confidence)"
+    else:
+        visual_finding = "no usable visual screening result (triage based on symptoms only)"
+
+    if has_severe:
+        symptom_finding = "severe symptoms reported"
+    elif has_moderate:
+        symptom_finding = "moderate symptoms reported (fatigue, dizziness, headache or breathlessness)"
+    else:
+        symptom_finding = "no moderate or severe symptoms reported"
 
     if has_severe or (pallor_detected and visual_conf > 85.0 and has_moderate):
         urgency: Literal["green", "yellow", "red"] = "red"
-        summary = "High clinical urgency: Exertional or severe symptoms and marked conjunctival pallor detected."
-        note = (
-            f"Multi-modal fusion triggered RED priority. Visual pallor confidence: {visual_conf:.1f}%. "
-            "Reported severe fatigue and exertional dyspnea require immediate clinician evaluation."
-        )
+        summary = f"High urgency: {symptom_finding}; {visual_finding}."
+        note = "RED priority. Immediate clinician evaluation required."
     elif has_moderate or (pallor_detected and visual_conf >= 55.0):
         urgency = "yellow"
-        summary = "Moderate urgency: Conjunctival pallor with ongoing exertional fatigue or headaches."
-        note = (
-            f"Multi-modal fusion assigned YELLOW priority. MobileNetV3 visual confidence: {visual_conf:.1f}%. "
-            "Symptoms indicate likely iron-deficiency anaemia. Clinical teleconsultation or PHC visit advised."
-        )
+        summary = f"Moderate urgency: {symptom_finding}; {visual_finding}."
+        note = "YELLOW priority. Clinician review by teleconsultation or PHC visit advised."
     else:
         urgency = "green"
-        summary = "Low urgency: Minimal fatigue reported with mild or normal conjunctival erythema."
-        note = (
-            f"Multi-modal fusion assigned GREEN priority. Visual confidence: {visual_conf:.1f}%. "
-            "Self-care nutrition and dietary guidance suitable under primary care protocol."
-        )
+        summary = f"Low urgency: {symptom_finding}; {visual_finding}."
+        note = "GREEN priority. Self-care and dietary guidance under primary care protocol."
 
     return urgency, summary, note
 
@@ -111,8 +124,10 @@ async def assess_and_submit_triage(
         request.symptom_answers, request.visual_screening
     )
 
-    case_id = f"SC-{secrets.randbelow(8999) + 1000}"
-    vis_conf = request.visual_screening.confidence if request.visual_screening else 75.0
+    # 4 random digits collided (PRIMARY KEY error) after a few dozen cases.
+    case_id = f"SC-{secrets.token_hex(4).upper()}"
+    visual = request.visual_screening
+    vis_conf = visual.confidence if visual is not None and visual.usable else 0.0
 
     # Extract user ID from token if provided
     resolved_user_id = request.user_id

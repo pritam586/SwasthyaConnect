@@ -59,7 +59,8 @@ def main() -> None:
         base,
         tf.keras.layers.GlobalAveragePooling2D(),
         tf.keras.layers.Dropout(0.30),
-        tf.keras.layers.Dense(1, activation="sigmoid", name="anemia_probability"),
+        # Sigmoid = probability of class_names[1]; folders sort as anemic, non_anemic.
+        tf.keras.layers.Dense(1, activation="sigmoid", name="positive_class_probability"),
     ])
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
@@ -74,7 +75,15 @@ def main() -> None:
     metrics = model.evaluate(test, return_dict=True)
     model.save(output / "visual_screening.keras")
     (output / "metrics.json").write_text(
-        json.dumps({"test_metrics": metrics, "history": history.history, "labels": train.class_names}, indent=2),
+        json.dumps(
+            {
+                "test_metrics": metrics,
+                "history": history.history,
+                "labels": train.class_names,
+                "positive_class": train.class_names[1],
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
     print(json.dumps(metrics, indent=2))
