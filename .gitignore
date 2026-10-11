@@ -1,0 +1,43 @@
+# Secrets and local configuration (each service ships a committed .env.example)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Local databases and uploaded files (production data lives in PostgreSQL)
+*.db
+*.db-shm
+*.db-wal
+uploads/
+
+# Trained models are deployed via MODEL_BUNDLE_URL, not committed
+ml-service/models/
+# Scratch outputs of training/preprocessing runs (the curated dataset is ml-service/datasets/)
+ml-service/data/
+
+# Old data kept locally for scripts/migrate_sqlite.py
+legacy-data/
+
+# Vendored Python environment and package-manager caches (not project source)
+ml_runtime/
+.pnpm-store/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.claude/launch.json

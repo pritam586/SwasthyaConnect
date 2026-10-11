@@ -1,5 +1,8 @@
 # SwasthyaConnect — Part 1 Architecture
 
+> **Historical document (2026-10-07 audit).** The refactor it planned has been carried out: see the root
+> `README.md` for the current architecture. Paths such as `ui/`, `ui/backend` and `ml_runtime/` below no longer exist.
+
 **Status:** repository audit complete. Feature implementation is **not** started in this document.  
 **Date:** 2026-10-07  
 **Scope:** understand the existing system, freeze architectural decisions, and list what to keep, change, or rebuild.

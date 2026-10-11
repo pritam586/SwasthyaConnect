@@ -1,0 +1,7 @@
+# Inference service (deployed). Training extras are in requirements-train.txt.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+Pillow>=10.0
+numpy>=1.26,<3
+tensorflow-cpu>=2.16,<2.22

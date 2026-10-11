@@ -1,0 +1,77 @@
+# Render Blueprint: backend API + ML inference service + PostgreSQL.
+# The Next.js frontend is deployed separately on Vercel (see README, "Deployment").
+# Deploy: Render dashboard -> New -> Blueprint -> select this repository.
+
+envVarGroups:
+  - name: swasthya-internal
+    envVars:
+      # Shared secret the API sends to the ML service. Generated once by Render.
+      - key: ML_SERVICE_TOKEN
+        generateValue: true
+
+databases:
+  - name: swasthya-db
+    databaseName: swasthya
+    user: swasthya
+    plan: free  # Render's free PostgreSQL expires after 30 days; choose a paid plan for real use.
+
+services:
+  - type: web
+    name: swasthya-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    # Migrations run before every start, so the schema always matches the code.
+    startCommand: alembic upgrade head && python -m app.server
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: swasthya-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # Set to your Vercel URL(s), e.g. https://swasthyaconnect.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ML_SERVICE_URL
+        fromService:
+          type: pserv
+          name: swasthya-ml
+          property: hostport
+      - key: ENABLE_DEV_OTP
+        value: "false"
+      - key: CLINIC_TIMEZONE
+        value: Asia/Kolkata
+      # Optional real SMS OTP (also add "twilio" to backend/requirements.txt).
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_VERIFY_SERVICE_SID
+        sync: false
+      - fromGroup: swasthya-internal
+
+  # Private service: reachable only by the API over Render's private network.
+  # TensorFlow needs more memory than the smallest instances; use "standard" if it runs out.
+  - type: pserv
+    name: swasthya-ml
+    runtime: docker
+    rootDir: ml-service
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # A .zip with visual_screening.keras, metrics.json and model_validation.json.
+      # Without it the service runs but screening reports "unavailable".
+      - key: MODEL_BUNDLE_URL
+        sync: false
+      - key: MODEL_BUNDLE_SHA256
+        sync: false
+      - fromGroup: swasthya-internal
